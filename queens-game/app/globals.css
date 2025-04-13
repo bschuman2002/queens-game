@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles below */
+:root {
+  --max-width: 1100px;
+  --border-radius: 12px;
+  --font-mono: ui-monospace, Menlo, Monaco, "Cascadia Mono",
+    "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace",
+    "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New",
+    monospace;
+}
+
+@layer base {
+  * {
+    @apply outline-none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  *:focus, *:active, *:focus-visible {
+    @apply outline-none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-focus-ring-color: transparent;
+  }
+
+  [role="button"] {
+    @apply select-none appearance-none outline-none;
+  }
+
+  button, input {
+    @apply outline-none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .board-grid {
+    @apply grid gap-[1px] bg-black p-[2px] border-4 border-black select-none;
+  }
+
+  .square {
+    @apply aspect-square flex items-center justify-center text-4xl font-bold bg-white cursor-pointer select-none hover:bg-gray-100 outline-none;
+  }
+
+  .queen {
+    @apply text-black;
+  }
+
+  .x-mark {
+    @apply text-gray-600;
+  }
+
+  /* Region colors */
+  .region-purple { @apply bg-purple-300 !important; }
+  .region-blue { @apply bg-blue-300 !important; }
+  .region-green { @apply bg-green-300 !important; }
+  .region-yellow { @apply bg-yellow-200 !important; }
+  .region-orange { @apply bg-orange-200 !important; }
+  .region-red { @apply bg-red-300 !important; }
+  .region-gray { @apply bg-gray-200 !important; }
+  .region-brown { @apply bg-amber-600 !important; }
+
+  .game-button {
+    @apply px-4 py-2 bg-gray-800 text-white rounded-lg shadow-lg hover:bg-gray-700 transition-colors m-2 disabled:bg-gray-400 disabled:cursor-not-allowed outline-none;
+  }
+
+  .controls {
+    @apply flex flex-wrap justify-center gap-2 mt-4;
+  }
+
+  .message {
+    @apply text-center text-lg font-semibold mt-4;
+  }
+
+  .success {
+    @apply text-green-600;
+  }
+
+  .error {
+    @apply text-red-600;
+  }
+}
