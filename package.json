@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "auto-commit": "bash scripts/auto-commit.sh",
-    "test": "vitest"
+    "test": "vitest",
+    "deploy": "vercel deploy --prod"
   },
   "dependencies": {
     "next": "^15.3.0",
@@ -30,6 +31,7 @@
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.3.2",
     "typescript": "^5.3.3",
+    "vercel": "^31.2.3",
     "vitest": "^3.1.1"
   }
 }

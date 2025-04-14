@@ -1,14 +1,62 @@
 # Queens Game
 
-A challenging puzzle game based on chess queens and colored regions. Built with Next.js and Tailwind CSS.
+A logic puzzle game where you place queens on a chessboard following unique region constraints.
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 ## Game Rules
 
-1. Place queens on the board so that:
-   - Each colored region contains exactly one queen
-   - No queen can attack another queen (horizontally, vertically, or diagonally)
-   - Queens cannot be placed on diagonally adjacent squares
-   - Each row and column must contain exactly one queen
+1. Place queens on the board so that no queen can attack another queen
+2. Queens cannot be in the same row or column
+3. Queens from the same colored region cannot be placed in the same region
+4. Queens cannot be adjacent (including diagonally)
+
+## Deployment
+
+The game is set up for easy deployment to Vercel:
+
+### Deploy with Vercel CLI
+
+1. Install the Vercel CLI globally (if not already installed):
+   ```bash
+   npm install -g vercel
+   ```
+
+2. Login to Vercel:
+   ```bash
+   vercel login
+   ```
+
+3. Deploy the app:
+   ```bash
+   npm run deploy
+   ```
+
+### Deploy from GitHub
+
+1. Push your code to GitHub
+2. Go to [Vercel](https://vercel.com) and sign up or log in
+3. Click "New Project" and import your GitHub repository
+4. Use default settings and click "Deploy"
+
+## Technologies Used
+
+- Next.js
+- React
+- TypeScript
+- Tailwind CSS
 
 ## Features
 
@@ -19,18 +67,6 @@ A challenging puzzle game based on chess queens and colored regions. Built with 
 - "Show Solution" option
 - Right-click to remove pieces
 - Responsive design
-
-## Getting Started
-
-```bash
-# Install dependencies
-npm install
-
-# Run development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to play the game.
 
 ## Technical Details
 
