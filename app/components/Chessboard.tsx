@@ -340,11 +340,12 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
       }
     }
 
-    // Check adjacent queens
+    // Check adjacent queens (both orthogonal and diagonal)
     for (let i = 0; i < queenPositions.length; i++) {
       for (let j = i + 1; j < queenPositions.length; j++) {
         const [r1, c1] = queenPositions[i];
         const [r2, c2] = queenPositions[j];
+        // Check if queens are adjacent (orthogonal or diagonal)
         if (Math.abs(r1 - r2) <= 1 && Math.abs(c1 - c2) <= 1) {
           conflicts.push({
             type: 'adjacent',
