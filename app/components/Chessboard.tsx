@@ -21,6 +21,7 @@ const REGION_COLORS: Record<RegionColor, string> = {
   rose: 'bg-rose-600',
   emerald: 'bg-emerald-700',
   amber: 'bg-amber-500',
+  unassigned: 'bg-gray-300',
 };
 
 export default function Chessboard({ size: initialSize = Math.floor(Math.random() * 5) + 8, onSizeChange }: ChessboardProps) {
@@ -295,49 +296,103 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
 
   const handleSquareClick = (row: number, col: number) => {
     if (showingSolution) return;
-    const newSquares = [...squares[row]];
     
-    if (newSquares[col] === null) {
-      newSquares[col] = 'x';
+    // Create deep copy of squares to avoid mutation issues
+    const newSquares = JSON.parse(JSON.stringify(squares));
+    
+    if (newSquares[row][col] === null) {
+      newSquares[row][col] = 'x';
       setMessage('X placed to mark an invalid position.');
       setConflicts([]);
-    } else if (newSquares[col] === 'x') {
-      newSquares[col] = 'queen';
+    } else if (newSquares[row][col] === 'x') {
+      newSquares[row][col] = 'queen';
       setMessage('Queen placed. Checking for conflicts...');
       
       // If auto-place X's is enabled, mark invalid positions
       if (autoPlaceXs) {
         // Mark invalid positions in the same row
         for (let c = 0; c < size; c++) {
-          if (c !== col && newSquares[c] === null) {
-            newSquares[c] = 'x';
+          if (c !== col && newSquares[row][c] === null) {
+            newSquares[row][c] = 'x';
+          }
+        }
+        
+        // Mark invalid positions in the same column
+        for (let r = 0; r < size; r++) {
+          if (r !== row && newSquares[r][col] === null) {
+            newSquares[r][col] = 'x';
           }
         }
         
         // Mark invalid positions in the same region
         const region = regions[row][col];
         for (let r = 0; r < size; r++) {
-          for (const c of Array(size).keys()) {
-            if ((r !== row || c !== col) && regions[r][c] === region && squares[r][c] === null) {
-              squares[r][c] = 'x';
+          for (let c = 0; c < size; c++) {
+            if ((r !== row || c !== col) && regions[r][c] === region && newSquares[r][c] === null) {
+              newSquares[r][c] = 'x';
             }
           }
         }
       }
-    } else {
-      newSquares[col] = null;
+    } else { // Queen is being removed
+      // Clear this square
+      newSquares[row][col] = null;
       setMessage('Square cleared.');
       setConflicts([]);
+      
+      // If auto-place X's is enabled, we need to recalculate all X positions
+      if (autoPlaceXs) {
+        // First clear all X's
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (newSquares[r][c] === 'x') {
+              newSquares[r][c] = null;
+            }
+          }
+        }
+        
+        // Then re-place X's based on remaining queens
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (newSquares[r][c] === 'queen') {
+              const queenRegion = regions[r][c];
+              
+              // Mark row
+              for (let c2 = 0; c2 < size; c2++) {
+                if (c2 !== c && newSquares[r][c2] === null) {
+                  newSquares[r][c2] = 'x';
+                }
+              }
+              
+              // Mark column
+              for (let r2 = 0; r2 < size; r2++) {
+                if (r2 !== r && newSquares[r2][c] === null) {
+                  newSquares[r2][c] = 'x';
+                }
+              }
+              
+              // Mark region
+              for (let r2 = 0; r2 < size; r2++) {
+                for (let c2 = 0; c2 < size; c2++) {
+                  if ((r2 !== r || c2 !== c) && regions[r2][c2] === queenRegion && newSquares[r2][c2] === null) {
+                    newSquares[r2][c2] = 'x';
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
     
-    setSquares(squares.map((rowArr, i) => i === row ? newSquares : rowArr));
+    setSquares(newSquares);
     
     // Check if the puzzle is solved
-    const queenCount = squares.reduce((count, row) => 
-      count + row.filter(square => square === 'queen').length, 0);
+    const queenCount = newSquares.reduce((count: number, row: SquareState[]) => 
+      count + row.filter((square: SquareState) => square === 'queen').length, 0);
     
     if (queenCount === size) {
-      const conflicts = findConflicts(squares);
+      const conflicts = findConflicts(newSquares);
       if (conflicts.length === 0) {
         setIsSolved(true);
         setMessage('Congratulations! You solved the puzzle!');
@@ -449,10 +504,56 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   const handleRightClick = (e: React.MouseEvent, row: number, col: number) => {
     e.preventDefault();
     if (showingSolution) return;
+    
     if (squares[row][col] === 'queen' || squares[row][col] === 'x') {
-      const newSquares = squares.map((rowArr, i) => 
-        i === row ? rowArr.map((val, j) => j === col ? null : val) : rowArr
-      );
+      // Create deep copy of squares to avoid mutation issues
+      const newSquares = JSON.parse(JSON.stringify(squares));
+      newSquares[row][col] = null;
+      
+      // If auto-place X's is enabled and we're removing a queen, recalculate X positions
+      if (autoPlaceXs && squares[row][col] === 'queen') {
+        // First clear all X's
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (newSquares[r][c] === 'x') {
+              newSquares[r][c] = null;
+            }
+          }
+        }
+        
+        // Then re-place X's based on remaining queens
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (newSquares[r][c] === 'queen') {
+              const queenRegion = regions[r][c];
+              
+              // Mark row
+              for (let c2 = 0; c2 < size; c2++) {
+                if (c2 !== c && newSquares[r][c2] === null) {
+                  newSquares[r][c2] = 'x';
+                }
+              }
+              
+              // Mark column
+              for (let r2 = 0; r2 < size; r2++) {
+                if (r2 !== r && newSquares[r2][c] === null) {
+                  newSquares[r2][c] = 'x';
+                }
+              }
+              
+              // Mark region
+              for (let r2 = 0; r2 < size; r2++) {
+                for (let c2 = 0; c2 < size; c2++) {
+                  if ((r2 !== r || c2 !== c) && regions[r2][c2] === queenRegion && newSquares[r2][c2] === null) {
+                    newSquares[r2][c2] = 'x';
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
       setSquares(newSquares);
       setMessage('Square cleared.');
       setConflicts([]);
@@ -551,6 +652,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     setMessage('');
     setIsSolved(false);
     setConflicts([]);
+    // No need to handle auto-X placements here since we're clearing everything
   }, [size]);
 
   // Check diagonal conflicts
@@ -562,7 +664,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
 
   const renderChessboard = () => {
     return (
-      <div className="grid" style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
+      <div className="grid border-4 border-black rounded-md shadow-lg" style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
         {Array(size).fill(null).map((_, rowIndex) =>
           Array(size).fill(null).map((_, colIndex) => (
             <div key={`${rowIndex}-${colIndex}`} className="relative">
@@ -591,7 +693,12 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         </button>
         <button
           onClick={clearBoard}
-          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+          disabled={showingSolution}
+          className={`px-4 py-2 rounded transition-colors ${
+            showingSolution 
+              ? 'bg-red-300 text-white cursor-not-allowed opacity-60' 
+              : 'bg-red-500 text-white hover:bg-red-600'
+          }`}
         >
           Clear Board
         </button>
@@ -623,7 +730,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
             <span>Auto-place X's</span>
           </label>
         </div>
-        <div className="relative">
+        <div className="relative p-4">
           {renderChessboard()}
         </div>
         {isSolved && (
