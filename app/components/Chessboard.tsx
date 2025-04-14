@@ -24,7 +24,7 @@ const REGION_COLORS: Record<RegionColor, string> = {
   unassigned: 'bg-gray-300',
 };
 
-export default function Chessboard({ size: initialSize = Math.floor(Math.random() * 5) + 8, onSizeChange }: ChessboardProps) {
+export default function Chessboard({ size: initialSize = 8, onSizeChange }: ChessboardProps) {
   const [size, setSize] = useState<number>(initialSize);
   const [regions, setRegions] = useState<RegionColor[][]>(() => 
     Array(initialSize).fill(null).map(() => Array(initialSize).fill('purple' as RegionColor))
@@ -39,62 +39,122 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [message, setMessage] = useState('');
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [toast, setToast] = useState<{message: string, type: 'info' | 'success' | 'error', visible: boolean}>({
+    message: '',
+    type: 'info',
+    visible: false
+  });
+  // Track retry attempts
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3;
+  // Flag to track if component has been mounted
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Set mounted flag after client-side render
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Initialize with a random size on client-side only to prevent hydration mismatch
+  useEffect(() => {
+    if (initialSize === 8) { // If we're using the default size
+      const randomSize = Math.floor(Math.random() * 5) + 8; // Generate between 8-12
+      setSize(randomSize);
+      if (onSizeChange) {
+        onSizeChange(randomSize);
+      }
+    }
+  }, [initialSize, onSizeChange]);
+
+  // Show toast notification
+  const showToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setToast({ message, type, visible: true });
+    
+    // Auto hide after 3 seconds
+    setTimeout(() => {
+      setToast(prev => ({ ...prev, visible: false }));
+    }, 3000);
+  };
 
   // Memoize the generateValidPuzzle function
   const generateValidPuzzle = useCallback(() => {
-    let retryCount = 0;
-    const maxRetries = 10;
-
-    while (retryCount < maxRetries) {
-      try {
-        const [newRegions, newSolution] = generatePuzzle(size);
-        
-        // Count unique colors used
-        const usedColors = new Set<RegionColor>();
-        for (let r = 0; r < size; r++) {
-          for (let c = 0; c < size; c++) {
-            usedColors.add(newRegions[r][c]);
-          }
+    try {
+      setIsGenerating(true);
+      showToast('Generating new puzzle...', 'info');
+      
+      const [newRegions, newSolution] = generatePuzzle(size);
+      
+      // Count unique colors used (just for validation)
+      const usedColors = new Set<RegionColor>();
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          usedColors.add(newRegions[r][c]);
         }
-        
-        // Ensure we have at least size/2 different colors and no null regions
-        const isValid = usedColors.size >= Math.ceil(size/2) && 
-          newRegions.every(row => row.every(color => color !== null));
-        
-        if (isValid) {
-          setRegions(newRegions);
-          setSolution(newSolution);
-          setShowingSolution(false);
-          setIsSolved(false);
-          setSquares(Array(size).fill(null).map(() => Array(size).fill(null)));
-          setMessage('');
-          return true;
-        }
-        retryCount++;
-      } catch (error) {
-        console.error('Attempt failed:', error);
-        retryCount++;
       }
-    }
-    return false;
-  }, [size]); // Only depend on size
-
-  // Initialize board on mount and when size changes
-  useEffect(() => {
-    if (onSizeChange) {
-      onSizeChange(size);
-    }
-
-    const success = generateValidPuzzle();
-    if (!success) {
-      const newSize = Math.max(8, size - 1);
+      
+      // Set the state with our new puzzle
+      setRegions(newRegions);
+      setSolution(newSolution);
+      setShowingSolution(false);
+      setIsSolved(false);
+      setSquares(Array(size).fill(null).map(() => Array(size).fill(null)));
+      setMessage('');
+      
+      setIsGenerating(false);
+      showToast('New puzzle ready!', 'success');
+      return true;
+    } catch (error) {
+      console.error('Failed to generate puzzle:', error);
+      
+      // Try with a different size instead of just showing an error
+      // Generate a different size that's not the current one
+      let newSize: number;
+      do {
+        newSize = Math.floor(Math.random() * 5) + 8; // Random size between 8-12
+      } while (newSize === size);
+      
+      showToast('Trying with a different board size...', 'info');
+      
+      // Update size which will trigger a new puzzle generation via useEffect
       setSize(newSize);
       if (onSizeChange) {
         onSizeChange(newSize);
       }
-      setMessage('Had trouble generating a puzzle. Trying a smaller size...');
+      
+      return false;
     }
-  }, [size, onSizeChange, generateValidPuzzle]); // Include all dependencies
+  }, [size, onSizeChange]); // Add onSizeChange as a dependency
+
+  // Initialize board on mount and when size changes
+  useEffect(() => {
+    // Skip server-side rendering and wait for client
+    if (!isMounted) return;
+
+    if (onSizeChange) {
+      onSizeChange(size);
+    }
+
+    // If we've already tried too many times, use a fallback size
+    if (retryCount >= MAX_RETRIES) {
+      showToast('Having trouble generating puzzles. Using fallback size 8.', 'error');
+      setSize(8);
+      setRetryCount(0);
+      return;
+    }
+
+    setIsGenerating(true);
+    showToast('Generating new puzzle...', 'info');
+    const success = generateValidPuzzle();
+    
+    if (!success) {
+      // Increment retry count
+      setRetryCount(prev => prev + 1);
+    } else {
+      // Reset retry count on success
+      setRetryCount(0);
+    }
+  }, [size, onSizeChange, generateValidPuzzle, retryCount, MAX_RETRIES, isMounted]); // Include isMounted
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isRegionConnected = (regions: RegionColor[][], color: RegionColor): boolean => {
@@ -149,6 +209,8 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
 
   // Function to randomly select a new board size
   const generateRandomSize = useCallback(() => {
+    if (isGenerating) return; // Prevent multiple simultaneous generations
+    
     setShowingSolution(false);
     const newSize = Math.floor(Math.random() * 5) + 8; // Always generate a new size between 8 and 12
     
@@ -159,13 +221,14 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     setIsSolved(false);
     setConflicts([]);
     setMessage('');
+    setRetryCount(0); // Reset retry count when user manually requests a new puzzle
     
     // Set new size which will trigger puzzle generation
     setSize(newSize);
     if (onSizeChange) {
       onSizeChange(newSize);
     }
-  }, [onSizeChange]);
+  }, [onSizeChange, isGenerating]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isValidPosition = (board: SquareState[][], row: number, col: number): boolean => {
@@ -561,9 +624,19 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   };
 
   const renderSquare = (row: number, col: number) => {
+    // Handle out-of-bounds indexes during SSR
+    if (!isMounted && (row >= 8 || col >= 8)) {
+      return <div className="w-12 h-12 bg-purple-700 border border-black/10"></div>;
+    }
+    
+    // Handle potential undefined values during SSR/hydration
+    if (!squares[row] || squares[row][col] === undefined || !regions[row] || regions[row][col] === undefined) {
+      return <div className="w-12 h-12 bg-purple-700 border border-black/10"></div>;
+    }
+    
     const position = row * size + col;
     const state = squares[row][col];
-    const region = regions?.[row]?.[col] || 'purple';
+    const region = regions[row][col];
 
     // Check if this square is involved in any conflicts
     const isConflicting = conflicts.some(conflict => conflict.positions.includes(position));
@@ -663,10 +736,19 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   };
 
   const renderChessboard = () => {
+    // Fixed initial grid for SSR to prevent hydration mismatch
+    // This will be replaced during client-side rendering
+    const gridStyle = isMounted 
+      ? { gridTemplateColumns: `repeat(${size}, 1fr)` } 
+      : { gridTemplateColumns: `repeat(8, 1fr)` };
+    
+    // If not mounted yet (server-side), use initial size of 8
+    const displaySize = isMounted ? size : 8;
+    
     return (
-      <div className="grid border-4 border-black rounded-md shadow-lg" style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
-        {Array(size).fill(null).map((_, rowIndex) =>
-          Array(size).fill(null).map((_, colIndex) => (
+      <div className="grid border-4 border-black rounded-md shadow-lg" style={gridStyle}>
+        {Array(displaySize).fill(null).map((_, rowIndex) =>
+          Array(displaySize).fill(null).map((_, colIndex) => (
             <div key={`${rowIndex}-${colIndex}`} className="relative">
               {renderSquare(rowIndex, colIndex)}
             </div>
@@ -681,9 +763,14 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
       <div className="mb-4 flex gap-4">
         <button
           onClick={generateRandomSize}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+          disabled={isGenerating || showingSolution}
+          className={`px-4 py-2 rounded transition-colors ${
+            isGenerating || showingSolution
+              ? 'bg-blue-300 text-white cursor-not-allowed opacity-60'
+              : 'bg-blue-500 text-white hover:bg-blue-600'
+          }`}
         >
-          New Puzzle
+          {isGenerating ? 'Generating...' : 'New Puzzle'}
         </button>
         <button
           onClick={showSolution}
@@ -739,6 +826,19 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
           </div>
         )}
       </div>
+      
+      {/* Toast notification */}
+      {toast.visible && (
+        <div 
+          className={`fixed bottom-4 right-4 px-6 py-3 rounded-md shadow-lg text-white transition-opacity duration-300 ${
+            toast.type === 'success' ? 'bg-green-500' : 
+            toast.type === 'error' ? 'bg-red-500' : 
+            'bg-blue-500'
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
     </div>
   );
 }
