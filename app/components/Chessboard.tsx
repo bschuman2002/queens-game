@@ -643,22 +643,10 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
           }
         }
         
-        // Mark invalid positions in all diagonals
-        for (let r = 0; r < size; r++) {
-          for (let c = 0; c < size; c++) {
-            if ((r !== row || c !== col) && newSquares[r * size + c] === null) {
-              // Check if they're on the same diagonal
-              if (Math.abs(r - row) === Math.abs(c - col)) {
-                newSquares[r * size + c] = 'x';
-              }
-            }
-          }
-        }
-        
-        // Mark diagonally adjacent squares (only direct adjacents)
+        // Mark only directly adjacent diagonal squares
         for (let r = Math.max(0, row - 1); r <= Math.min(size - 1, row + 1); r++) {
           for (let c = Math.max(0, col - 1); c <= Math.min(size - 1, col + 1); c++) {
-            if ((r !== row || c !== col) && newSquares[r * size + c] === null) {
+            if ((r !== row || c !== col) && Math.abs(r - row) === 1 && Math.abs(c - col) === 1 && newSquares[r * size + c] === null) {
               newSquares[r * size + c] = 'x';
             }
           }
@@ -712,22 +700,10 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
                 }
               }
               
-              // Mark invalid positions in all diagonals
-              for (let r2 = 0; r2 < size; r2++) {
-                for (let c2 = 0; c2 < size; c2++) {
-                  if ((r2 !== queenRow || c2 !== queenCol) && tempSquares[r2 * size + c2] === null) {
-                    // Check if they're on the same diagonal
-                    if (Math.abs(r2 - queenRow) === Math.abs(c2 - queenCol)) {
-                      tempSquares[r2 * size + c2] = 'x';
-                    }
-                  }
-                }
-              }
-              
-              // Mark diagonally adjacent squares (only direct adjacents)
+              // Mark only directly adjacent diagonal squares
               for (let r2 = Math.max(0, queenRow - 1); r2 <= Math.min(size - 1, queenRow + 1); r2++) {
                 for (let c2 = Math.max(0, queenCol - 1); c2 <= Math.min(size - 1, queenCol + 1); c2++) {
-                  if ((r2 !== queenRow || c2 !== queenCol) && tempSquares[r2 * size + c2] === null) {
+                  if ((r2 !== queenRow || c2 !== queenCol) && Math.abs(r2 - queenRow) === 1 && Math.abs(c2 - queenCol) === 1 && tempSquares[r2 * size + c2] === null) {
                     tempSquares[r2 * size + c2] = 'x';
                   }
                 }
@@ -929,22 +905,10 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
                   }
                 }
                 
-                // Mark invalid positions in all diagonals
-                for (let r2 = 0; r2 < size; r2++) {
-                  for (let c2 = 0; c2 < size; c2++) {
-                    if ((r2 !== queenRow || c2 !== queenCol) && newSquares[r2 * size + c2] === null) {
-                      // Check if they're on the same diagonal
-                      if (Math.abs(r2 - queenRow) === Math.abs(c2 - queenCol)) {
-                        newSquares[r2 * size + c2] = 'x';
-                      }
-                    }
-                  }
-                }
-                
-                // Mark diagonally adjacent squares (only direct adjacents)
+                // Mark only directly adjacent diagonal squares
                 for (let r2 = Math.max(0, queenRow - 1); r2 <= Math.min(size - 1, queenRow + 1); r2++) {
                   for (let c2 = Math.max(0, queenCol - 1); c2 <= Math.min(size - 1, queenCol + 1); c2++) {
-                    if ((r2 !== queenRow || c2 !== queenCol) && newSquares[r2 * size + c2] === null) {
+                    if ((r2 !== queenRow || c2 !== queenCol) && Math.abs(r2 - queenRow) === 1 && Math.abs(c2 - queenCol) === 1 && newSquares[r2 * size + c2] === null) {
                       newSquares[r2 * size + c2] = 'x';
                     }
                   }
