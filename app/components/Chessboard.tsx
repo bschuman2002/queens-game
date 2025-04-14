@@ -37,502 +37,230 @@ const REGION_COLORS: Record<RegionColor, string> = {
   red: 'bg-red-700',
   gray: 'bg-gray-500',
   brown: 'bg-amber-900',
-  teal: 'bg-teal-500',
+  teal: 'bg-teal-700',
   pink: 'bg-pink-500',
   indigo: 'bg-indigo-800',
-  lime: 'bg-lime-400',
-  cyan: 'bg-cyan-400',
+  lime: 'bg-lime-500',
+  cyan: 'bg-cyan-600',
   rose: 'bg-rose-600',
-  emerald: 'bg-emerald-500',
+  emerald: 'bg-emerald-700',
   amber: 'bg-amber-500',
 };
 
-export default function Chessboard({ size: initialSize = 8, onSizeChange }: ChessboardProps) {
-  const [size, setSize] = useState<number>(8);
+export default function Chessboard({ size: initialSize = Math.floor(Math.random() * 5) + 8, onSizeChange }: ChessboardProps) {
+  const [size, setSize] = useState<number>(initialSize);
   const [regions, setRegions] = useState<RegionColor[][]>([]);
   const [isSolved, setIsSolved] = useState<boolean>(false);
   const [showingSolution, setShowingSolution] = useState<boolean>(false);
-  const [squares, setSquares] = useState<SquareState[]>(Array(size * size).fill(null));
+  const [squares, setSquares] = useState<SquareState[]>(Array(initialSize * initialSize).fill(null));
   const [autoPlaceXs, setAutoPlaceXs] = useState(false);
   const [solution, setSolution] = useState<SquareState[]>([]);
   const [message, setMessage] = useState('');
 
-  const generatePuzzle = useCallback((): RegionColor[][] => {
-    // Create initial regions with one color
-    const initialRegions: RegionColor[][] = Array(size)
-      .fill(null)
-      .map(() => Array(size).fill(null as unknown as RegionColor));
-    
-    // Reset solution array
-    const initialSolution: SquareState[] = Array(size * size).fill(null);
-    
-    // STEP 1: Generate random queen positions (more variety)
+  // Initialize board on mount
+  useEffect(() => {
+    if (onSizeChange) {
+      onSizeChange(initialSize);
+    }
+  }, [initialSize, onSizeChange]);
+
+  const generatePuzzle = useCallback((): [RegionColor[][], SquareState[]] => {
+    // STEP 1: Place queens with controlled randomness
     const queens: [number, number][] = [];
     const usedRows = new Set<number>();
     const usedCols = new Set<number>();
-    
-    // Choose a random starting approach for increased variety
-    const approaches = ['diagonal', 'modular', 'staggered', 'random'];
-    const randomApproach = approaches[Math.floor(Math.random() * approaches.length)];
-    
-    const isAdjacent = (row1: number, col1: number, row2: number, col2: number): boolean => {
-      const rowDiff = Math.abs(row1 - row2);
-      const colDiff = Math.abs(col1 - col2);
-      return (rowDiff <= 1 && colDiff <= 1) && !(rowDiff === 0 && colDiff === 0);
-    };
-    
-    const tryRandomPlacement = () => {
-      queens.length = 0;
-      usedRows.clear();
-      usedCols.clear();
-      
-      // Different starting strategies for more variety
-      if (randomApproach === 'diagonal') {
-        // Start with queens on main diagonal with random offsets
-        const offset = Math.floor(Math.random() * size);
-        for (let i = 0; i < size; i++) {
-          const row = i;
-          const col = (i + offset) % size;
-          
-          // Check for adjacent queens before placing
-          let hasAdjacentQueen = false;
-          for (const [qRow, qCol] of queens) {
-            if (isAdjacent(row, col, qRow, qCol)) {
-              hasAdjacentQueen = true;
-              break;
-            }
-          }
-          
-          if (hasAdjacentQueen) {
-            return false;
-          }
-          
-          queens.push([row, col]);
-          usedRows.add(row);
-          usedCols.add(col);
-        }
-      } else if (randomApproach === 'modular') {
-        // Use modular arithmetic with a random factor
-        const factor = 2 + Math.floor(Math.random() * (size - 2));
-        for (let i = 0; i < size; i++) {
-          const row = i;
-          const col = (i * factor) % size;
-          
-          // Check for adjacent queens before placing
-          let hasAdjacentQueen = false;
-          for (const [qRow, qCol] of queens) {
-            if (isAdjacent(row, col, qRow, qCol)) {
-              hasAdjacentQueen = true;
-              break;
-            }
-          }
-          
-          if (hasAdjacentQueen) {
-            return false;
-          }
-          
-          queens.push([row, col]);
-          usedRows.add(row);
-          usedCols.add(col);
-        }
-      } else if (randomApproach === 'staggered') {
-        // Use a staggered pattern with random shifts
-        const shift = Math.floor(Math.random() * 4);
-        for (let i = 0; i < size; i++) {
-          let row = i;
-          let col;
-          if (i % 2 === 0) {
-            col = (i + shift) % size;
-          } else {
-            col = (i * 2 + shift) % size;
-          }
-          
-          // Check for adjacent queens before placing
-          let hasAdjacentQueen = false;
-          for (const [qRow, qCol] of queens) {
-            if (isAdjacent(row, col, qRow, qCol)) {
-              hasAdjacentQueen = true;
-              break;
-            }
-          }
-          
-          if (hasAdjacentQueen) {
-            return false;
-          }
-          
-          queens.push([row, col]);
-          usedRows.add(row);
-          usedCols.add(col);
-        }
-      } else {
-        // Fully randomized attempt (fallback)
-        return false;
-      }
-      
-      return true;
-    };
-    
-    // Second pass - backtracking search if initial approach fails
-    const placeQueensBacktracking = () => {
-      queens.length = 0;
-      usedRows.clear();
-      usedCols.clear();
-      
-      // Create all possible positions and shuffle them
-      const allPositions: [number, number][] = [];
-      for (let r = 0; r < size; r++) {
-        for (let c = 0; c < size; c++) {
-          allPositions.push([r, c]);
-        }
-      }
-      
-      // Fisher-Yates shuffle to randomize the search order
-      for (let i = allPositions.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [allPositions[i], allPositions[j]] = [allPositions[j], allPositions[i]];
-      }
-      
-      // Recursive backtracking with randomization
-      const placeNext = (index: number): boolean => {
-        if (index === size) return true;
+
+    // Create shuffled column order for variety
+    const shuffledCols = Array.from({ length: size }, (_, i) => i);
+    for (let i = shuffledCols.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledCols[i], shuffledCols[j]] = [shuffledCols[j], shuffledCols[i]];
+    }
+
+    // Use backtracking with randomized column order
+    const placeQueens = (index: number): boolean => {
+      if (index === size) return true;
+
+      // Try columns in random order
+      for (const col of shuffledCols) {
+        const row = index;
         
-        // Try random positions first
-        for (const [row, col] of allPositions) {
-          // Skip if row or column already used
-          if (usedRows.has(row) || usedCols.has(col)) continue;
-          
-          // Check for adjacent queens
-          let hasAdjacentQueen = false;
-          for (let i = 0; i < queens.length; i++) {
-            const [qRow, qCol] = queens[i];
-            if (isAdjacent(row, col, qRow, qCol)) {
-              hasAdjacentQueen = true;
-              break;
-            }
+        if (usedCols.has(col)) continue;
+        
+        // Check for adjacent queens
+        let hasAdjacentQueen = false;
+        for (const [qRow, qCol] of queens) {
+          if (Math.abs(row - qRow) <= 1 && Math.abs(col - qCol) <= 1) {
+            hasAdjacentQueen = true;
+            break;
           }
-          
-          if (hasAdjacentQueen) continue;
-          
-          // Place the queen
-          queens.push([row, col]);
-          usedRows.add(row);
-          usedCols.add(col);
-          
-          // Recurse
-          if (placeNext(index + 1)) return true;
-          
-          // Backtrack
-          queens.pop();
-          usedRows.delete(row);
-          usedCols.delete(col);
         }
         
-        return false;
-      };
+        if (hasAdjacentQueen) continue;
+        
+        queens.push([row, col]);
+        usedCols.add(col);
+        
+        if (placeQueens(index + 1)) return true;
+        
+        queens.pop();
+        usedCols.delete(col);
+      }
       
-      return placeNext(0);
+      return false;
     };
+
+    if (!placeQueens(0)) {
+      throw new Error('Failed to place queens');
+    }
+
+    // Create the solution array first
+    const solutionArray: SquareState[] = Array(size * size).fill(null);
+    queens.forEach(([row, col]) => {
+      solutionArray[row * size + col] = 'queen';
+    });
+
+    // STEP 2: Generate regions with controlled randomness
+    const regions: RegionColor[][] = Array(size)
+      .fill(null)
+      .map(() => Array(size).fill(null as unknown as RegionColor));
     
-    const generateRegions = (): RegionColor[][] => {
-      // Initialize all squares as null (unassigned)
-      const regions: RegionColor[][] = Array(size)
-        .fill(null)
-        .map(() => Array(size).fill(null as unknown as RegionColor));
-      
-      // Define the available colors with high contrast between adjacent colors
-      const availableColors: RegionColor[] = [
-        'blue', 'yellow', 'red', 'lime', 
-        'purple', 'cyan', 'brown', 'green',
-        'indigo', 'orange', 'emerald', 'pink',
-        'gray', 'amber', 'teal', 'rose'
-      ];
-      
-      // Shuffle colors to get a random assignment each time
-      for (let i = availableColors.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [availableColors[i], availableColors[j]] = [availableColors[j], availableColors[i]];
+    // Shuffle available colors
+    const availableColors: RegionColor[] = [
+      'blue', 'yellow', 'red', 'lime', 
+      'purple', 'cyan', 'brown', 'green',
+      'indigo', 'orange', 'emerald', 'pink',
+      'gray', 'amber', 'teal', 'rose'
+    ];
+    
+    for (let i = availableColors.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [availableColors[i], availableColors[j]] = [availableColors[j], availableColors[i]];
+    }
+
+    // Assign random colors to queens
+    queens.forEach(([row, col], index) => {
+      regions[row][col] = availableColors[index % availableColors.length];
+    });
+
+    // Grow regions with controlled randomness
+    const processed = Array(size).fill(false).map(() => Array(size).fill(false));
+    queens.forEach(([row, col]) => {
+      processed[row][col] = true;
+    });
+
+    // Create a list of unprocessed cells and shuffle it
+    const unprocessedCells: [number, number][] = [];
+    for (let row = 0; row < size; row++) {
+      for (let col = 0; col < size; col++) {
+        if (!processed[row][col]) {
+          unprocessedCells.push([row, col]);
+        }
       }
+    }
+    
+    // Shuffle unprocessed cells
+    for (let i = unprocessedCells.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [unprocessedCells[i], unprocessedCells[j]] = [unprocessedCells[j], unprocessedCells[i]];
+    }
+
+    // Process cells in random order
+    while (unprocessedCells.length > 0) {
+      let madeProgress = false;
       
-      // Assign unique colors to each queen
-      const regionColors: RegionColor[] = [];
-      for (let i = 0; i < size; i++) {
-        regionColors.push(availableColors[i % availableColors.length]);
-      }
-      
-      // Assign each queen its unique color
-      queens.forEach(([row, col], index) => {
-        regions[row][col] = regionColors[index];
-      });
-      
-      // Keep track of which cells have been processed
-      const processed = Array(size).fill(false).map(() => Array(size).fill(false));
-      queens.forEach(([row, col]) => {
-        processed[row][col] = true;
-      });
-      
-      // Function to check if a cell can be added to a region
-      const canAddToRegion = (row: number, col: number, color: RegionColor): boolean => {
-        // Check if this cell would connect to its region
-        let touchesSameColor = false;
+      for (let i = unprocessedCells.length - 1; i >= 0; i--) {
+        const [row, col] = unprocessedCells[i];
+        
+        // Find adjacent colors
+        const adjacentColors = new Set<RegionColor>();
         const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
         
         for (const [dr, dc] of directions) {
           const newRow = row + dr;
           const newCol = col + dc;
           
-          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
-            if (regions[newRow][newCol] === color) {
-              touchesSameColor = true;
-              break;
-            }
+          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && processed[newRow][newCol]) {
+            adjacentColors.add(regions[newRow][newCol]);
           }
         }
+
+        // If we found adjacent colors, randomly choose one
+        if (adjacentColors.size > 0) {
+          const colorArray = Array.from(adjacentColors);
+          const randomColor = colorArray[Math.floor(Math.random() * colorArray.length)];
+          regions[row][col] = randomColor;
+          processed[row][col] = true;
+          unprocessedCells.splice(i, 1);
+          madeProgress = true;
+        }
+      }
+
+      // If we can't make progress, assign the first available adjacent color
+      if (!madeProgress && unprocessedCells.length > 0) {
+        const [row, col] = unprocessedCells[0];
+        const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
         
-        return touchesSameColor;
-      };
-      
-      // Grow regions one cell at a time, ensuring connectivity
-      let madeProgress = true;
-      
-      // Assign growth rates to each region for variety
-      const growthRates = queens.map(() => {
-        // More extreme variation: some regions grow very fast, others very slow
-        const baseRate = Math.random();
-        return baseRate * baseRate * 1.5; // Square it to make differences more dramatic
-      });
-      
-      // Bias some regions to be much larger
-      const targetSizes = queens.map(() => {
-        const isLarge = Math.random() < 0.3; // 30% chance of being a large region
-        return isLarge ? size * size * 0.4 : size * size * 0.1; // Large regions target 40% of board, small ones 10%
-      });
-
-      while (madeProgress) {
-        madeProgress = false;
-        
-        // Process each queen's region
-        for (let queenIndex = 0; queenIndex < queens.length; queenIndex++) {
-          const color = regionColors[queenIndex];
-          const candidates: [number, number][] = [];
+        for (const [dr, dc] of directions) {
+          const newRow = row + dr;
+          const newCol = col + dc;
           
-          // Count current region size
-          let currentSize = 0;
-          for (let r = 0; r < size; r++) {
-            for (let c = 0; c < size; c++) {
-              if (regions[r][c] === color) currentSize++;
-            }
-          }
-          
-          // Stop growing if reached target size
-          if (currentSize >= targetSizes[queenIndex]) continue;
-          
-          // Aggressive growth for regions below target
-          const growthMultiplier = currentSize < targetSizes[queenIndex] ? 2.0 : 0.5;
-          
-          // Only attempt growth based on adjusted growth rate
-          if (Math.random() > growthRates[queenIndex] * growthMultiplier) {
-            continue;
-          }
-          
-          // Find unprocessed cells adjacent to this region
-          for (let row = 0; row < size; row++) {
-            for (let col = 0; col < size; col++) {
-              if (!processed[row][col] && regions[row][col] === null) {
-                if (canAddToRegion(row, col, color)) {
-                  // Add position weight based on distance from queen
-                  const [qRow, qCol] = queens[queenIndex];
-                  const distance = Math.abs(row - qRow) + Math.abs(col - qCol);
-                  const weight = Math.max(1, 5 - distance); // Higher weight for closer cells
-                  
-                  // Add the candidate multiple times based on weight
-                  for (let i = 0; i < weight; i++) {
-                    candidates.push([row, col]);
-                  }
-                }
-              }
-            }
-          }
-          
-          // Add multiple random candidates to the region based on growth rate
-          const numToAdd = Math.floor(candidates.length * growthRates[queenIndex] * growthMultiplier * 0.5);
-          for (let i = 0; i < numToAdd && candidates.length > 0; i++) {
-            const randomIndex = Math.floor(Math.random() * candidates.length);
-            const [row, col] = candidates[randomIndex];
-            regions[row][col] = color;
+          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && processed[newRow][newCol]) {
+            regions[row][col] = regions[newRow][newCol];
             processed[row][col] = true;
-            madeProgress = true;
-            
-            // Remove all instances of this position from candidates
-            candidates.splice(randomIndex, 1);
+            unprocessedCells.shift();
+            break;
           }
         }
       }
-      
-      // Fill any remaining unprocessed cells
-      for (let row = 0; row < size; row++) {
-        for (let col = 0; col < size; col++) {
-          if (!processed[row][col]) {
-            // Find adjacent colors
-            const adjacentColors = new Set<RegionColor>();
-            const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-            
-            for (const [dr, dc] of directions) {
-              const newRow = row + dr;
-              const newCol = col + dc;
-              
-              if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
-                if (regions[newRow][newCol] !== null) {
-                  adjacentColors.add(regions[newRow][newCol]);
-                }
-              }
-            }
-            
-            // Choose a random adjacent color
-            const colorArray = Array.from(adjacentColors);
-            const randomColor = colorArray[Math.floor(Math.random() * colorArray.length)];
-            regions[row][col] = randomColor || regionColors[0];
-            processed[row][col] = true;
-          }
-        }
-      }
-      
-      // Check for and fix single-square regions
-      const regionSizes = new Map<RegionColor, number>();
-      const singleSquarePositions = new Map<RegionColor, [number, number]>();
-
-      // Count region sizes and track positions of single squares
-      for (let row = 0; row < size; row++) {
-        for (let col = 0; col < size; col++) {
-          const color = regions[row][col];
-          regionSizes.set(color, (regionSizes.get(color) || 0) + 1);
-          if (regionSizes.get(color) === 1) {
-            singleSquarePositions.set(color, [row, col]);
-          }
-        }
-      }
-
-      // If we have more than one single-square region, merge them with adjacent regions
-      if (singleSquarePositions.size > 1) {
-        singleSquarePositions.forEach((pos, color) => {
-          const [row, col] = pos;
-          if (regionSizes.get(color) === 1) { // Double check it's still size 1
-            // Find the largest adjacent region
-            let maxSize = 0;
-            let bestColor: RegionColor | null = null;
-            const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-
-            for (const [dr, dc] of directions) {
-              const newRow = row + dr;
-              const newCol = col + dc;
-              
-              if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
-                const adjColor = regions[newRow][newCol];
-                const adjSize = regionSizes.get(adjColor) || 0;
-                // Prefer larger regions that aren't single squares
-                if (adjSize > maxSize && adjSize > 1) {
-                  maxSize = adjSize;
-                  bestColor = adjColor;
-                }
-              }
-            }
-
-            // Merge with the best adjacent region
-            if (bestColor) {
-              regions[row][col] = bestColor;
-              regionSizes.set(bestColor, (regionSizes.get(bestColor) || 0) + 1);
-              regionSizes.delete(color);
-            }
-          }
-        });
-      }
-
-      return regions;
-    };
-
-    // After generating regions, verify each region has exactly one queen
-    const verifyRegions = (regions: RegionColor[][]): boolean => {
-      const regionQueens = new Map<RegionColor, number>();
-      
-      // Count queens in each region
-      queens.forEach(([row, col]) => {
-        const region = regions[row][col];
-        regionQueens.set(region, (regionQueens.get(region) || 0) + 1);
-      });
-      
-      // Verify each region has exactly one queen
-      const allRegions = new Set<RegionColor>();
-      for (let row = 0; row < size; row++) {
-        for (let col = 0; col < size; col++) {
-          allRegions.add(regions[row][col]);
-        }
-      }
-      
-      for (const region of allRegions) {
-        if (!regionQueens.has(region) || regionQueens.get(region) !== 1) {
-          return false;
-        }
-      }
-      
-      return true;
-    };
-
-    // Try various approaches to get a valid queen placement
-    let validPlacement = tryRandomPlacement();
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (attempts < maxAttempts) {
-      if (!validPlacement) {
-        validPlacement = placeQueensBacktracking();
-      }
-
-      if (validPlacement && queens.length === size) {
-        const regions = generateRegions();
-        if (verifyRegions(regions)) {
-          // Mark queens in the solution
-          queens.forEach(([row, col]) => {
-            initialSolution[row * size + col] = 'queen';
-          });
-          
-          // Set up the solution
-          setSolution(initialSolution);
-          return regions;
-        }
-      }
-
-      // If we get here, either queen placement failed or regions weren't valid
-      queens.length = 0;
-      usedRows.clear();
-      usedCols.clear();
-      validPlacement = tryRandomPlacement();
-      attempts++;
     }
 
-    // If we've exhausted our attempts, throw an error
-    throw new Error('Failed to generate valid puzzle after maximum attempts');
+    return [regions, solutionArray];
   }, [size]);
 
   // Initialize board when size changes
   useEffect(() => {
-    try {
-      // When the size changes, reset the board and generate a new puzzle
-      setShowingSolution(false);
-      setIsSolved(false);
-      setSquares(Array(size * size).fill(null));
-      setSolution([]);
-      setMessage('');
-      
-      // Generate a new puzzle with the specified size
-      const newRegions = generatePuzzle();
-      setRegions(newRegions);
-    } catch (error) {
-      console.error('Error generating puzzle:', error);
-      // Reset to a safe state
-      setSquares(Array(size * size).fill(null));
-      setRegions(Array(size).fill([]).map(() => Array(size).fill('purple' as RegionColor)));
-      setMessage('Error generating puzzle. Please try again.');
+    const generateValidPuzzle = () => {
+      let retryCount = 0;
+      const maxRetries = 3;
+
+      while (retryCount < maxRetries) {
+        try {
+          const [newRegions, newSolution] = generatePuzzle();
+          // Verify the puzzle is valid (not all purple and has valid regions)
+          const isValid = newRegions.some(row => 
+            row.some(color => color !== 'purple') && 
+            row.every(color => color !== null)
+          );
+          
+          if (isValid) {
+            setRegions(newRegions);
+            setSolution(newSolution);
+            setShowingSolution(false);
+            setIsSolved(false);
+            setSquares(Array(size * size).fill(null));
+            setMessage('');
+            return true;
+          }
+        } catch (error) {
+          console.error('Attempt failed:', error);
+          retryCount++;
+        }
+      }
+      return false;
+    };
+
+    const success = generateValidPuzzle();
+    if (!success) {
+      // If all retries failed, reduce the board size and try again
+      const newSize = Math.max(8, size - 1);
+      setSize(newSize);
+      if (onSizeChange) {
+        onSizeChange(newSize);
+      }
+      setMessage('Had trouble generating a puzzle. Trying a smaller size...');
     }
-  }, [size, generatePuzzle]);
+  }, [size, generatePuzzle, onSizeChange]);
 
   // Function to randomly select a new board size
   const generateRandomSize = useCallback(() => {
