@@ -293,6 +293,20 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
       
       // Grow regions one cell at a time, ensuring connectivity
       let madeProgress = true;
+      
+      // Assign growth rates to each region for variety
+      const growthRates = queens.map(() => {
+        // More extreme variation: some regions grow very fast, others very slow
+        const baseRate = Math.random();
+        return baseRate * baseRate * 1.5; // Square it to make differences more dramatic
+      });
+      
+      // Bias some regions to be much larger
+      const targetSizes = queens.map(() => {
+        const isLarge = Math.random() < 0.3; // 30% chance of being a large region
+        return isLarge ? size * size * 0.4 : size * size * 0.1; // Large regions target 40% of board, small ones 10%
+      });
+
       while (madeProgress) {
         madeProgress = false;
         
@@ -301,24 +315,55 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
           const color = regionColors[queenIndex];
           const candidates: [number, number][] = [];
           
+          // Count current region size
+          let currentSize = 0;
+          for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+              if (regions[r][c] === color) currentSize++;
+            }
+          }
+          
+          // Stop growing if reached target size
+          if (currentSize >= targetSizes[queenIndex]) continue;
+          
+          // Aggressive growth for regions below target
+          const growthMultiplier = currentSize < targetSizes[queenIndex] ? 2.0 : 0.5;
+          
+          // Only attempt growth based on adjusted growth rate
+          if (Math.random() > growthRates[queenIndex] * growthMultiplier) {
+            continue;
+          }
+          
           // Find unprocessed cells adjacent to this region
           for (let row = 0; row < size; row++) {
             for (let col = 0; col < size; col++) {
               if (!processed[row][col] && regions[row][col] === null) {
                 if (canAddToRegion(row, col, color)) {
-                  candidates.push([row, col]);
+                  // Add position weight based on distance from queen
+                  const [qRow, qCol] = queens[queenIndex];
+                  const distance = Math.abs(row - qRow) + Math.abs(col - qCol);
+                  const weight = Math.max(1, 5 - distance); // Higher weight for closer cells
+                  
+                  // Add the candidate multiple times based on weight
+                  for (let i = 0; i < weight; i++) {
+                    candidates.push([row, col]);
+                  }
                 }
               }
             }
           }
           
-          // Add a random candidate to the region
-          if (candidates.length > 0) {
+          // Add multiple random candidates to the region based on growth rate
+          const numToAdd = Math.floor(candidates.length * growthRates[queenIndex] * growthMultiplier * 0.5);
+          for (let i = 0; i < numToAdd && candidates.length > 0; i++) {
             const randomIndex = Math.floor(Math.random() * candidates.length);
             const [row, col] = candidates[randomIndex];
             regions[row][col] = color;
             processed[row][col] = true;
             madeProgress = true;
+            
+            // Remove all instances of this position from candidates
+            candidates.splice(randomIndex, 1);
           }
         }
       }
@@ -351,6 +396,56 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
         }
       }
       
+      // Check for and fix single-square regions
+      const regionSizes = new Map<RegionColor, number>();
+      const singleSquarePositions = new Map<RegionColor, [number, number]>();
+
+      // Count region sizes and track positions of single squares
+      for (let row = 0; row < size; row++) {
+        for (let col = 0; col < size; col++) {
+          const color = regions[row][col];
+          regionSizes.set(color, (regionSizes.get(color) || 0) + 1);
+          if (regionSizes.get(color) === 1) {
+            singleSquarePositions.set(color, [row, col]);
+          }
+        }
+      }
+
+      // If we have more than one single-square region, merge them with adjacent regions
+      if (singleSquarePositions.size > 1) {
+        singleSquarePositions.forEach((pos, color) => {
+          const [row, col] = pos;
+          if (regionSizes.get(color) === 1) { // Double check it's still size 1
+            // Find the largest adjacent region
+            let maxSize = 0;
+            let bestColor: RegionColor | null = null;
+            const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+
+            for (const [dr, dc] of directions) {
+              const newRow = row + dr;
+              const newCol = col + dc;
+              
+              if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size) {
+                const adjColor = regions[newRow][newCol];
+                const adjSize = regionSizes.get(adjColor) || 0;
+                // Prefer larger regions that aren't single squares
+                if (adjSize > maxSize && adjSize > 1) {
+                  maxSize = adjSize;
+                  bestColor = adjColor;
+                }
+              }
+            }
+
+            // Merge with the best adjacent region
+            if (bestColor) {
+              regions[row][col] = bestColor;
+              regionSizes.set(bestColor, (regionSizes.get(bestColor) || 0) + 1);
+              regionSizes.delete(color);
+            }
+          }
+        });
+      }
+
       return regions;
     };
 
@@ -938,8 +1033,9 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
           {showingSolution ? 'Hide Solution' : 'Show Solution'}
         </button>
         <button
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={clearBoard}
+          disabled={showingSolution}
         >
           Clear Board
         </button>
