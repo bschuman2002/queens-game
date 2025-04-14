@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Queens Game
+
+A challenging puzzle game based on chess queens and colored regions. Built with Next.js and Tailwind CSS.
+
+## Game Rules
+
+1. Place queens on the board so that:
+   - Each colored region contains exactly one queen
+   - No queen can attack another queen (horizontally, vertically, or diagonally)
+   - Queens cannot be placed on diagonally adjacent squares
+   - Each row and column must contain exactly one queen
+
+## Features
+
+- Dynamic board sizes (8x8 and up)
+- Automatic invalid move detection
+- Visual region highlighting
+- Solution checker
+- "Show Solution" option
+- Right-click to remove pieces
+- Responsive design
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+# Install dependencies
+npm install
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to play the game.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Technical Details
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Built with Next.js 14 and React
+- Styled using Tailwind CSS
+- Uses TypeScript for type safety
+- Implements efficient backtracking algorithms for puzzle generation
+- Features region connectivity validation
 
-## Learn More
+## Development
 
-To learn more about Next.js, take a look at the following resources:
+The main game logic is in `app/components/Chessboard.tsx`. Key features include:
+- Puzzle generation with guaranteed solutions
+- Region generation with connectivity checks
+- Real-time move validation
+- Interactive UI with keyboard support
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Contributing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Feel free to open issues or submit pull requests for:
+- New features
+- Bug fixes
+- Performance improvements
+- UI/UX enhancements
