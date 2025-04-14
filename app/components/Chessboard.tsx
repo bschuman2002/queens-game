@@ -47,6 +47,11 @@ const REGION_COLORS: Record<RegionColor, string> = {
   amber: 'bg-amber-500',
 };
 
+interface ConflictInfo {
+  type: 'row' | 'column' | 'region' | 'adjacent';
+  positions: number[];
+}
+
 export default function Chessboard({ size: initialSize = Math.floor(Math.random() * 5) + 8, onSizeChange }: ChessboardProps) {
   const [size, setSize] = useState<number>(initialSize);
   const [regions, setRegions] = useState<RegionColor[][]>([]);
@@ -56,6 +61,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   const [autoPlaceXs, setAutoPlaceXs] = useState(false);
   const [solution, setSolution] = useState<SquareState[]>([]);
   const [message, setMessage] = useState('');
+  const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
 
   // Initialize board on mount
   useEffect(() => {
@@ -330,20 +336,103 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     }
   }, [showingSolution, size, solution]);
 
+  const findConflicts = (squares: SquareState[]): ConflictInfo[] => {
+    const conflicts: ConflictInfo[] = [];
+    const queenPositions: [number, number][] = [];
+    
+    // Get all queen positions
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (squares[r * size + c] === 'queen') {
+          queenPositions.push([r, c]);
+        }
+      }
+    }
+
+    // Check row conflicts
+    for (let r = 0; r < size; r++) {
+      const queensInRow = queenPositions.filter(([qr]) => qr === r);
+      if (queensInRow.length > 1) {
+        conflicts.push({
+          type: 'row',
+          positions: queensInRow.map(([qr, qc]) => qr * size + qc)
+        });
+      }
+    }
+
+    // Check column conflicts
+    for (let c = 0; c < size; c++) {
+      const queensInCol = queenPositions.filter(([_, qc]) => qc === c);
+      if (queensInCol.length > 1) {
+        conflicts.push({
+          type: 'column',
+          positions: queensInCol.map(([qr, qc]) => qr * size + qc)
+        });
+      }
+    }
+
+    // Check region conflicts
+    const regionQueens = new Map<RegionColor, number[]>();
+    for (const [r, c] of queenPositions) {
+      const region = regions[r][c];
+      if (!regionQueens.has(region)) {
+        regionQueens.set(region, []);
+      }
+      regionQueens.get(region)?.push(r * size + c);
+    }
+    for (const positions of regionQueens.values()) {
+      if (positions.length > 1) {
+        conflicts.push({
+          type: 'region',
+          positions
+        });
+      }
+    }
+
+    // Check adjacent queens
+    for (let i = 0; i < queenPositions.length; i++) {
+      for (let j = i + 1; j < queenPositions.length; j++) {
+        const [r1, c1] = queenPositions[i];
+        const [r2, c2] = queenPositions[j];
+        if (Math.abs(r1 - r2) <= 1 && Math.abs(c1 - c2) <= 1) {
+          conflicts.push({
+            type: 'adjacent',
+            positions: [r1 * size + c1, r2 * size + c2]
+          });
+        }
+      }
+    }
+
+    return conflicts;
+  };
+
   const handleSquareClick = (row: number, col: number) => {
     if (showingSolution) return;
     
     const index = row * size + col;
     const newSquares = [...squares];
     
-    // Cycle through: null -> 'x' -> 'queen' -> null
     if (newSquares[index] === null) {
       newSquares[index] = 'x';
       setMessage('X placed to mark an invalid position.');
+      setConflicts([]);
     } else if (newSquares[index] === 'x') {
-      // Place queen regardless of validity check
       newSquares[index] = 'queen';
-      setMessage('Queen placed successfully!');
+      setMessage('Queen placed. Checking for conflicts...');
+      
+      // Check for conflicts after placing queen
+      const newConflicts = findConflicts(newSquares);
+      setConflicts(newConflicts);
+      
+      if (newConflicts.length > 0) {
+        const conflictMessages = {
+          row: 'Queens in same row',
+          column: 'Queens in same column',
+          region: 'Multiple queens in same region',
+          adjacent: 'Queens are touching'
+        };
+        setMessage(newConflicts.map(c => conflictMessages[c.type]).join(', '));
+      }
       
       // Auto-place X's if enabled
       if (autoPlaceXs) {
@@ -381,9 +470,9 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         }
       }
     } else {
-      // Removing a queen
       newSquares[index] = null;
       setMessage('Square cleared.');
+      setConflicts([]);
       
       // Remove auto-placed X's if needed
       if (autoPlaceXs) {
@@ -453,6 +542,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     if (queens.length === size && isSolutionValid(newSquares)) {
       setMessage('Congratulations! You solved the puzzle!');
       setIsSolved(true);
+      setConflicts([]);
     }
   };
   
@@ -550,7 +640,19 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   const renderSquare = (row: number, col: number) => {
     const position = row * size + col;
     const state = squares[position];
-    const region = regions?.[row]?.[col] || 'purple'; // Provide default color if regions not initialized
+    const region = regions?.[row]?.[col] || 'purple';
+
+    // Check if this square is involved in any conflicts
+    const isConflicting = conflicts.some(conflict => conflict.positions.includes(position));
+    const conflictTypes = conflicts
+      .filter(conflict => conflict.positions.includes(position))
+      .map(conflict => conflict.type);
+
+    // Determine conflict highlight classes
+    let conflictClass = '';
+    if (isConflicting) {
+      conflictClass = 'ring-4 ring-red-500';
+    }
 
     // Determine border classes based on neighbors
     let borderClasses = '';
@@ -655,7 +757,8 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         key={`${row}-${col}`}
         className={`w-12 h-12 flex items-center justify-center cursor-pointer relative outline-none focus:outline-none active:outline-none
           ${REGION_COLORS[region]}
-          ${borderClasses}`}
+          ${borderClasses}
+          ${conflictClass}`}
         onClick={() => handleSquareClick(row, col)}
         onContextMenu={handleRightClick}
         onKeyDown={(e) => {
@@ -666,6 +769,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         }}
         role="button"
         tabIndex={0}
+        title={conflictTypes.length > 0 ? `Conflicts: ${conflictTypes.join(', ')}` : ''}
         style={{ 
           WebkitTapHighlightColor: 'transparent',
           outline: 'none',
@@ -681,7 +785,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
           <span className="text-black text-opacity-60 text-lg select-none">✕</span>
         )}
         {state === 'queen' && (
-          <span className={`text-2xl ${isSolved ? 'text-yellow-500' : 'text-black'} select-none`}>
+          <span className={`text-2xl ${isSolved ? 'text-yellow-500' : isConflicting ? 'text-red-600' : 'text-black'} select-none`}>
             ♛
           </span>
         )}
@@ -701,6 +805,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     setSquares(Array(size * size).fill(null));
     setMessage('');
     setIsSolved(false);
+    setConflicts([]);
   }, [size]);
 
   // Check diagonal conflicts
