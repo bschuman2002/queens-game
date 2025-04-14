@@ -1,32 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-
-interface ChessboardProps {
-  size?: number;
-  onSizeChange?: (size: number) => void;
-}
-
-interface Square {
-  row: number;
-  col: number;
-  region: string;
-}
-
-type SquareState = 'empty' | 'x' | 'queen' | null;
-type RegionColor = 'purple' | 'blue' | 'green' | 'yellow' | 'orange' | 'red' | 'gray' | 'brown' | 'teal' | 'pink' | 'indigo' | 'lime' | 'cyan' | 'rose' | 'emerald' | 'amber';
-
-// Base regions template
-const BASE_REGIONS: RegionColor[][] = [
-  ['purple', 'purple', 'purple', 'purple', 'purple', 'purple', 'purple', 'orange'],
-  ['purple', 'blue', 'blue', 'gray', 'gray', 'gray', 'gray', 'orange'],
-  ['purple', 'blue', 'green', 'green', 'gray', 'orange', 'orange', 'orange'],
-  ['purple', 'blue', 'green', 'gray', 'gray', 'gray', 'orange', 'orange'],
-  ['purple', 'red', 'red', 'yellow', 'yellow', 'gray', 'orange', 'orange'],
-  ['purple', 'red', 'yellow', 'yellow', 'gray', 'gray', 'orange', 'orange'],
-  ['purple', 'red', 'red', 'yellow', 'gray', 'gray', 'brown', 'orange'],
-  ['purple', 'gray', 'gray', 'gray', 'gray', 'gray', 'orange', 'orange'],
-];
+import { generatePuzzle } from '../utils/puzzleGenerator';
+import { ChessboardProps, ConflictInfo, RegionColor, SquareState } from '../types/chessboard';
 
 const REGION_COLORS: Record<RegionColor, string> = {
   purple: 'bg-purple-700',
@@ -47,31 +23,79 @@ const REGION_COLORS: Record<RegionColor, string> = {
   amber: 'bg-amber-500',
 };
 
-interface ConflictInfo {
-  type: 'row' | 'column' | 'region' | 'adjacent';
-  positions: number[];
-}
-
-const borderClasses = 'border border-black';
-
 export default function Chessboard({ size: initialSize = Math.floor(Math.random() * 5) + 8, onSizeChange }: ChessboardProps) {
   const [size, setSize] = useState<number>(initialSize);
-  const [regions, setRegions] = useState<RegionColor[][]>([]);
+  const [regions, setRegions] = useState<RegionColor[][]>(() => 
+    Array(initialSize).fill(null).map(() => Array(initialSize).fill('purple' as RegionColor))
+  );
   const [isSolved, setIsSolved] = useState<boolean>(false);
   const [showingSolution, setShowingSolution] = useState<boolean>(false);
-  const [squares, setSquares] = useState<SquareState[]>(Array(initialSize * initialSize).fill(null));
+  const [squares, setSquares] = useState<SquareState[][]>(() => 
+    Array(initialSize).fill(null).map(() => Array(initialSize).fill(null))
+  );
   const [autoPlaceXs, setAutoPlaceXs] = useState(false);
-  const [solution, setSolution] = useState<SquareState[]>([]);
+  const [solution, setSolution] = useState<SquareState[][]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [message, setMessage] = useState('');
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
 
-  // Initialize board on mount
+  // Memoize the generateValidPuzzle function
+  const generateValidPuzzle = useCallback(() => {
+    let retryCount = 0;
+    const maxRetries = 10;
+
+    while (retryCount < maxRetries) {
+      try {
+        const [newRegions, newSolution] = generatePuzzle(size);
+        
+        // Count unique colors used
+        const usedColors = new Set<RegionColor>();
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            usedColors.add(newRegions[r][c]);
+          }
+        }
+        
+        // Ensure we have at least size/2 different colors and no null regions
+        const isValid = usedColors.size >= Math.ceil(size/2) && 
+          newRegions.every(row => row.every(color => color !== null));
+        
+        if (isValid) {
+          setRegions(newRegions);
+          setSolution(newSolution);
+          setShowingSolution(false);
+          setIsSolved(false);
+          setSquares(Array(size).fill(null).map(() => Array(size).fill(null)));
+          setMessage('');
+          return true;
+        }
+        retryCount++;
+      } catch (error) {
+        console.error('Attempt failed:', error);
+        retryCount++;
+      }
+    }
+    return false;
+  }, [size]); // Only depend on size
+
+  // Initialize board on mount and when size changes
   useEffect(() => {
     if (onSizeChange) {
-      onSizeChange(initialSize);
+      onSizeChange(size);
     }
-  }, [initialSize, onSizeChange]);
 
+    const success = generateValidPuzzle();
+    if (!success) {
+      const newSize = Math.max(8, size - 1);
+      setSize(newSize);
+      if (onSizeChange) {
+        onSizeChange(newSize);
+      }
+      setMessage('Had trouble generating a puzzle. Trying a smaller size...');
+    }
+  }, [size, onSizeChange, generateValidPuzzle]); // Include all dependencies
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isRegionConnected = (regions: RegionColor[][], color: RegionColor): boolean => {
     const visited = Array(size).fill(false).map(() => Array(size).fill(false));
     let startRow = -1, startCol = -1;
@@ -122,230 +146,13 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     return true;
   };
 
-  const generatePuzzle = useCallback((): [RegionColor[][], SquareState[]] => {
-    // STEP 1: Place queens with controlled randomness
-    const queens: [number, number][] = [];
-    const usedRows = new Set<number>();
-    const usedCols = new Set<number>();
-
-    // Create shuffled column order for variety
-    const shuffledCols = Array.from({ length: size }, (_, i) => i);
-    for (let i = shuffledCols.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledCols[i], shuffledCols[j]] = [shuffledCols[j], shuffledCols[i]];
-    }
-
-    // Use backtracking with randomized column order
-    const placeQueens = (index: number): boolean => {
-      if (index === size) return true;
-
-      for (const col of shuffledCols) {
-        const row = index;
-        if (usedCols.has(col)) continue;
-        
-        let hasAdjacentQueen = false;
-        for (const [qRow, qCol] of queens) {
-          if (Math.abs(row - qRow) <= 1 && Math.abs(col - qCol) <= 1) {
-            hasAdjacentQueen = true;
-            break;
-          }
-        }
-        
-        if (hasAdjacentQueen) continue;
-        
-        queens.push([row, col]);
-        usedCols.add(col);
-        
-        if (placeQueens(index + 1)) return true;
-        
-        queens.pop();
-        usedCols.delete(col);
-      }
-      return false;
-    };
-
-    if (!placeQueens(0)) {
-      throw new Error('Failed to place queens');
-    }
-
-    // Create the solution array
-    const solutionArray: SquareState[] = Array(size * size).fill(null);
-    queens.forEach(([row, col]) => {
-      solutionArray[row * size + col] = 'queen';
-    });
-
-    // STEP 2: Generate regions by growing from queens
-    const regions: RegionColor[][] = Array(size)
-      .fill(null)
-      .map(() => Array(size).fill(null as unknown as RegionColor));
-    
-    const availableColors: RegionColor[] = [
-      'blue', 'yellow', 'red', 'lime', 'purple', 'cyan', 
-      'brown', 'green', 'indigo', 'orange', 'emerald', 'pink',
-      'gray', 'amber', 'teal', 'rose'
-    ].slice(0, queens.length) as RegionColor[];
-
-    // Shuffle colors
-    for (let i = availableColors.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [availableColors[i], availableColors[j]] = [availableColors[j], availableColors[i]];
-    }
-
-    // Initialize regions with queens
-    queens.forEach(([row, col], index) => {
-      regions[row][col] = availableColors[index];
-    });
-
-    // Function to get unassigned neighbors
-    const getUnassignedNeighbors = (row: number, col: number): [number, number][] => {
-      const neighbors: [number, number][] = [];
-      const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-      
-      for (const [dr, dc] of directions) {
-        const newRow = row + dr;
-        const newCol = col + dc;
-        if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && 
-            regions[newRow][newCol] === null) {
-          neighbors.push([newRow, newCol]);
-        }
-      }
-      return neighbors;
-    };
-
-    // Grow regions from queens
-    const unprocessed = new Set<string>();
-    for (let r = 0; r < size; r++) {
-      for (let c = 0; c < size; c++) {
-        if (regions[r][c] === null) {
-          unprocessed.add(`${r},${c}`);
-        }
-      }
-    }
-
-    // Keep growing regions until all cells are assigned
-    while (unprocessed.size > 0) {
-      // For each color, try to grow its region
-      for (let colorIndex = 0; colorIndex < availableColors.length; colorIndex++) {
-        const color = availableColors[colorIndex];
-        
-        // Find all cells of this color
-        const colorCells: [number, number][] = [];
-        for (let r = 0; r < size; r++) {
-          for (let c = 0; c < size; c++) {
-            if (regions[r][c] === color) {
-              colorCells.push([r, c]);
-            }
-          }
-        }
-
-        // Try to grow from each cell of this color
-        for (const [row, col] of colorCells) {
-          const neighbors = getUnassignedNeighbors(row, col);
-          for (const [nRow, nCol] of neighbors) {
-            // Random chance to grow in this direction
-            if (Math.random() < 0.5) {
-              regions[nRow][nCol] = color;
-              unprocessed.delete(`${nRow},${nCol}`);
-            }
-          }
-        }
-      }
-
-      // If no growth happened, assign remaining cells to adjacent regions
-      if (unprocessed.size > 0) {
-        const remaining = Array.from(unprocessed);
-        const [r, c] = remaining[Math.floor(Math.random() * remaining.length)]
-          .split(',')
-          .map(Number);
-        
-        // Find adjacent colors
-        const adjacentColors = new Set<RegionColor>();
-        const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-        for (const [dr, dc] of directions) {
-          const newRow = r + dr;
-          const newCol = c + dc;
-          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && 
-              regions[newRow][newCol] !== null) {
-            adjacentColors.add(regions[newRow][newCol]);
-          }
-        }
-
-        // If no adjacent colors, use random color
-        const color = adjacentColors.size > 0 
-          ? Array.from(adjacentColors)[Math.floor(Math.random() * adjacentColors.size)]
-          : availableColors[Math.floor(Math.random() * availableColors.length)];
-        
-        regions[r][c] = color;
-        unprocessed.delete(`${r},${c}`);
-      }
-    }
-
-    return [regions, solutionArray];
-  }, [size]);
-
-  // Initialize board when size changes
-  useEffect(() => {
-    const generateValidPuzzle = () => {
-      let retryCount = 0;
-      const maxRetries = 10; // Increased from 3 to 10 for better chances
-
-      while (retryCount < maxRetries) {
-        try {
-          const [newRegions, newSolution] = generatePuzzle();
-          
-          // Count unique colors used
-          const usedColors = new Set<RegionColor>();
-          for (let r = 0; r < size; r++) {
-            for (let c = 0; c < size; c++) {
-              usedColors.add(newRegions[r][c]);
-            }
-          }
-          
-          // Ensure we have at least size/2 different colors and no null regions
-          const isValid = usedColors.size >= Math.ceil(size/2) && 
-            newRegions.every(row => row.every(color => color !== null));
-          
-          if (isValid) {
-            setRegions(newRegions);
-            setSolution(newSolution);
-            setShowingSolution(false);
-            setIsSolved(false);
-            setSquares(Array(size * size).fill(null));
-            setMessage('');
-            return true;
-          }
-          retryCount++;
-        } catch (error) {
-          console.error('Attempt failed:', error);
-          retryCount++;
-        }
-      }
-      return false;
-    };
-
-    const success = generateValidPuzzle();
-    if (!success) {
-      // If all retries failed, reduce the board size and try again
-      const newSize = Math.max(8, size - 1);
-      setSize(newSize);
-      if (onSizeChange) {
-        onSizeChange(newSize);
-      }
-      setMessage('Had trouble generating a puzzle. Trying a smaller size...');
-    }
-  }, [size, generatePuzzle, onSizeChange]);
-
   // Function to randomly select a new board size
   const generateRandomSize = useCallback(() => {
     setShowingSolution(false);
-    let newSize;
-    // Keep generating until we get a different size, or force regeneration with same size
-    do {
-      newSize = Math.floor(Math.random() * 5) + 8;
-    } while (newSize === size && Math.random() < 0.5); // 50% chance to retry if same size
+    const newSize = Math.floor(Math.random() * 5) + 8; // Always generate a new size between 8 and 12
     
-    // Force puzzle regeneration by clearing state first
-    setSquares(Array(newSize * newSize).fill(null));
+    // Clear state before setting new size
+    setSquares(Array(newSize).fill(null).map(() => Array(newSize).fill(null)));
     setRegions([]);
     setSolution([]);
     setIsSolved(false);
@@ -357,25 +164,25 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     if (onSizeChange) {
       onSizeChange(newSize);
     }
-  }, [size, onSizeChange]);
+  }, [onSizeChange]);
 
-  const isValidPosition = (board: SquareState[], row: number, col: number): boolean => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isValidPosition = (board: SquareState[][], row: number, col: number): boolean => {
     // If regions is not properly initialized, return false
     if (!regions || !Array.isArray(regions) || !regions[row] || !regions[row][col]) {
       return false;
     }
 
-    const position = row * size + col;
     const region = regions[row][col];
 
     // Check row
     for (let c = 0; c < size; c++) {
-      if (c !== col && board[row * size + c] === 'queen') return false;
+      if (c !== col && board[row][c] === 'queen') return false;
     }
 
     // Check column
     for (let r = 0; r < size; r++) {
-      if (r !== row && board[r * size + col] === 'queen') return false;
+      if (r !== row && board[r][col] === 'queen') return false;
     }
 
     // Check region
@@ -383,7 +190,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
       for (let c = 0; c < size; c++) {
         if ((r !== row || c !== col) && 
             regions[r][c] === region && 
-            board[r * size + c] === 'queen') {
+            board[r][c] === 'queen') {
           return false;
         }
       }
@@ -395,7 +202,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         if (r >= 0 && r < size && c >= 0 && c < size &&
             (r !== row || c !== col) &&
             Math.abs(r - row) === 1 && Math.abs(c - col) === 1 &&
-            board[r * size + c] === 'queen') {
+            board[r][c] === 'queen') {
           return false;
         }
       }
@@ -406,24 +213,24 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
 
   const showSolution = useCallback(() => {
     if (showingSolution) {
-      setSquares(Array(size * size).fill(null));
+      setSquares(Array(size).fill(null).map(() => Array(size).fill(null)));
       setShowingSolution(false);
       setMessage('');
     } else {
       setShowingSolution(true);
-      setSquares([...solution]);
+      setSquares(solution);
       setMessage('Solution shown! Queens are now placed in valid positions.');
     }
   }, [showingSolution, size, solution]);
 
-  const findConflicts = (squares: SquareState[]): ConflictInfo[] => {
+  const findConflicts = (squares: SquareState[][]): ConflictInfo[] => {
     const conflicts: ConflictInfo[] = [];
     const queenPositions: [number, number][] = [];
     
     // Get all queen positions
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        if (squares[r * size + c] === 'queen') {
+        if (squares[r][c] === 'queen') {
           queenPositions.push([r, c]);
         }
       }
@@ -487,156 +294,78 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   };
 
   const handleSquareClick = (row: number, col: number) => {
-    if (showingSolution || isSolved) return;
+    if (showingSolution) return;
+    const newSquares = [...squares[row]];
     
-    const index = row * size + col;
-    const newSquares = [...squares];
-    
-    if (newSquares[index] === null) {
-      newSquares[index] = 'x';
+    if (newSquares[col] === null) {
+      newSquares[col] = 'x';
       setMessage('X placed to mark an invalid position.');
       setConflicts([]);
-    } else if (newSquares[index] === 'x') {
-      newSquares[index] = 'queen';
+    } else if (newSquares[col] === 'x') {
+      newSquares[col] = 'queen';
       setMessage('Queen placed. Checking for conflicts...');
       
-      // Check for conflicts after placing queen
-      const newConflicts = findConflicts(newSquares);
-      setConflicts(newConflicts);
-      
-      if (newConflicts.length > 0) {
-        const conflictMessages = {
-          row: 'Queens in same row',
-          column: 'Queens in same column',
-          region: 'Multiple queens in same region',
-          adjacent: 'Queens are touching'
-        };
-        setMessage(newConflicts.map(c => conflictMessages[c.type]).join(', '));
-      }
-      
-      // Auto-place X's if enabled
+      // If auto-place X's is enabled, mark invalid positions
       if (autoPlaceXs) {
         // Mark invalid positions in the same row
         for (let c = 0; c < size; c++) {
-          if (c !== col && newSquares[row * size + c] === null) {
-            newSquares[row * size + c] = 'x';
-          }
-        }
-        
-        // Mark invalid positions in the same column
-        for (let r = 0; r < size; r++) {
-          if (r !== row && newSquares[r * size + col] === null) {
-            newSquares[r * size + col] = 'x';
+          if (c !== col && newSquares[c] === null) {
+            newSquares[c] = 'x';
           }
         }
         
         // Mark invalid positions in the same region
         const region = regions[row][col];
         for (let r = 0; r < size; r++) {
-          for (let c = 0; c < size; c++) {
-            if ((r !== row || c !== col) && regions[r][c] === region && newSquares[r * size + c] === null) {
-              newSquares[r * size + c] = 'x';
-            }
-          }
-        }
-        
-        // Mark only directly adjacent diagonal squares
-        for (let r = Math.max(0, row - 1); r <= Math.min(size - 1, row + 1); r++) {
-          for (let c = Math.max(0, col - 1); c <= Math.min(size - 1, col + 1); c++) {
-            if ((r !== row || c !== col) && Math.abs(r - row) === 1 && Math.abs(c - col) === 1 && newSquares[r * size + c] === null) {
-              newSquares[r * size + c] = 'x';
+          for (const c of Array(size).keys()) {
+            if ((r !== row || c !== col) && regions[r][c] === region && squares[r][c] === null) {
+              squares[r][c] = 'x';
             }
           }
         }
       }
     } else {
-      newSquares[index] = null;
+      newSquares[col] = null;
       setMessage('Square cleared.');
       setConflicts([]);
-      
-      // Remove auto-placed X's if needed
-      if (autoPlaceXs) {
-        // Create a temporary board with all queens except the removed one
-        const tempSquares = [...newSquares];
-        
-        // Clear all X's first
-        for (let i = 0; i < tempSquares.length; i++) {
-          if (tempSquares[i] === 'x') {
-            tempSquares[i] = null;
-          }
-        }
-        
-        // Re-place X's based on remaining queens
-        for (let r = 0; r < size; r++) {
-          for (let c = 0; c < size; c++) {
-            if (tempSquares[r * size + c] === 'queen') {
-              const queenRow = r;
-              const queenCol = c;
-              
-              // Mark invalid positions in the same row
-              for (let c2 = 0; c2 < size; c2++) {
-                if (c2 !== queenCol && tempSquares[queenRow * size + c2] === null) {
-                  tempSquares[queenRow * size + c2] = 'x';
-                }
-              }
-              
-              // Mark invalid positions in the same column
-              for (let r2 = 0; r2 < size; r2++) {
-                if (r2 !== queenRow && tempSquares[r2 * size + queenCol] === null) {
-                  tempSquares[r2 * size + queenCol] = 'x';
-                }
-              }
-              
-              // Mark invalid positions in the same region
-              const region = regions[queenRow][queenCol];
-              for (let r2 = 0; r2 < size; r2++) {
-                for (let c2 = 0; c2 < size; c2++) {
-                  if ((r2 !== queenRow || c2 !== queenCol) && regions[r2][c2] === region && tempSquares[r2 * size + c2] === null) {
-                    tempSquares[r2 * size + c2] = 'x';
-                  }
-                }
-              }
-              
-              // Mark only directly adjacent diagonal squares
-              for (let r2 = Math.max(0, queenRow - 1); r2 <= Math.min(size - 1, queenRow + 1); r2++) {
-                for (let c2 = Math.max(0, queenCol - 1); c2 <= Math.min(size - 1, queenCol + 1); c2++) {
-                  if ((r2 !== queenRow || c2 !== queenCol) && Math.abs(r2 - queenRow) === 1 && Math.abs(c2 - queenCol) === 1 && tempSquares[r2 * size + c2] === null) {
-                    tempSquares[r2 * size + c2] = 'x';
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        // Apply all the changes
-        setSquares(tempSquares);
-        return;
-      }
     }
     
-    setSquares(newSquares);
+    setSquares(squares.map((rowArr, i) => i === row ? newSquares : rowArr));
     
     // Check if the puzzle is solved
-    const queens = newSquares.filter(square => square === 'queen');
-    if (queens.length === size && isSolutionValid(newSquares)) {
-      setMessage('Congratulations! You solved the puzzle!');
-      setIsSolved(true);
-      setConflicts([]);
+    const queenCount = squares.reduce((count, row) => 
+      count + row.filter(square => square === 'queen').length, 0);
+    
+    if (queenCount === size) {
+      const conflicts = findConflicts(squares);
+      if (conflicts.length === 0) {
+        setIsSolved(true);
+        setMessage('Congratulations! You solved the puzzle!');
+      } else {
+        setConflicts(conflicts);
+        const conflictMessages = {
+          row: 'Queens in same row',
+          column: 'Queens in same column',
+          region: 'Multiple queens in same region',
+          adjacent: 'Queens are touching'
+        };
+        setMessage(conflicts.map(c => conflictMessages[c.type]).join(', '));
+      }
     }
   };
   
-  const isValidQueenPlacement = (row: number, col: number, currentSquares: SquareState[]) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const isValidQueenPlacement = (row: number, col: number, currentSquares: SquareState[][]) => {
     // Check if there's already a queen in this row
     for (let c = 0; c < size; c++) {
-      if (c !== col && currentSquares[row * size + c] === 'queen') {
+      if (c !== col && currentSquares[row][c] === 'queen') {
         return false;
       }
     }
     
     // Check if there's already a queen in this column
     for (let r = 0; r < size; r++) {
-      if (r !== row && currentSquares[r * size + col] === 'queen') {
+      if (r !== row && currentSquares[r][col] === 'queen') {
         return false;
       }
     }
@@ -647,7 +376,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
       for (let c = 0; c < size; c++) {
         if ((r !== row || c !== col) && 
             regions[r][c] === region && 
-            currentSquares[r * size + c] === 'queen') {
+            currentSquares[r][c] === 'queen') {
           return false;
         }
       }
@@ -656,7 +385,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     // Check for any adjacent queens (both diagonal and orthogonal)
     for (let r = Math.max(0, row - 1); r <= Math.min(size - 1, row + 1); r++) {
       for (let c = Math.max(0, col - 1); c <= Math.min(size - 1, col + 1); c++) {
-        if ((r !== row || c !== col) && currentSquares[r * size + c] === 'queen') {
+        if ((r !== row || c !== col) && currentSquares[r][c] === 'queen') {
           return false;
         }
       }
@@ -665,10 +394,10 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     return true;
   };
   
-  const isSolutionValid = (currentSquares: SquareState[]) => {
+  const isSolutionValid = (currentSquares: SquareState[][]): boolean => {
     // Check that there are exactly N queens
-    const queens = currentSquares.filter(square => square === 'queen');
-    if (queens.length !== size) {
+    const queens = currentSquares.flat().filter(square => square === 'queen');
+    if (queens.length !== size * size) {
       return false;
     }
     
@@ -676,7 +405,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     const queenPositions: [number, number][] = [];
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        if (currentSquares[r * size + c] === 'queen') {
+        if (currentSquares[r][c] === 'queen') {
           queenPositions.push([r, c]);
         }
       }
@@ -719,12 +448,11 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
 
   const handleRightClick = (e: React.MouseEvent, row: number, col: number) => {
     e.preventDefault();
-    if (showingSolution || isSolved) return;
-    
-    const position = row * size + col;
-    if (squares[position] === 'queen' || squares[position] === 'x') {
-      const newSquares = [...squares];
-      newSquares[position] = null;
+    if (showingSolution) return;
+    if (squares[row][col] === 'queen' || squares[row][col] === 'x') {
+      const newSquares = squares.map((rowArr, i) => 
+        i === row ? rowArr.map((val, j) => j === col ? null : val) : rowArr
+      );
       setSquares(newSquares);
       setMessage('Square cleared.');
       setConflicts([]);
@@ -733,7 +461,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
 
   const renderSquare = (row: number, col: number) => {
     const position = row * size + col;
-    const state = squares[position];
+    const state = squares[row][col];
     const region = regions?.[row]?.[col] || 'purple';
 
     // Check if this square is involved in any conflicts
@@ -751,12 +479,27 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     // Add solved state classes
     const solvedClass = isSolved ? 'opacity-90 cursor-not-allowed' : '';
 
+    // Calculate borders between different regions - add null checks
+    const topBorder = row > 0 && regions?.[row - 1]?.[col] !== undefined 
+      ? regions[row - 1][col] !== region ? 'border-t-[3px] border-t-black' : ''
+      : '';
+    const bottomBorder = row < size - 1 && regions?.[row + 1]?.[col] !== undefined
+      ? regions[row + 1][col] !== region ? 'border-b-[3px] border-b-black' : ''
+      : '';
+    const leftBorder = col > 0 && regions?.[row]?.[col - 1] !== undefined
+      ? regions[row][col - 1] !== region ? 'border-l-[3px] border-l-black' : ''
+      : '';
+    const rightBorder = col < size - 1 && regions?.[row]?.[col + 1] !== undefined
+      ? regions[row][col + 1] !== region ? 'border-r-[3px] border-r-black' : ''
+      : '';
+
     return (
       <div
         key={`${row}-${col}`}
         className={`w-12 h-12 flex items-center justify-center relative outline-none focus:outline-none active:outline-none
           ${REGION_COLORS[region]}
-          ${borderClasses}
+          border border-black/10
+          ${topBorder} ${bottomBorder} ${leftBorder} ${rightBorder}
           ${conflictClass}
           ${solvedClass}
           ${!isSolved ? 'cursor-pointer' : ''}`}
@@ -778,7 +521,6 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
           userSelect: 'none',
           WebkitTouchCallout: 'none',
           borderStyle: 'solid',
-          borderColor: 'black',
           WebkitUserModify: 'read-only',
           filter: isSolved ? 'brightness(0.95)' : 'none'
         }}
@@ -795,6 +537,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     );
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSizeChange = (newSize: number) => {
     const validSize = Math.max(8, newSize);
     setSize(validSize);
@@ -804,38 +547,51 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   };
 
   const clearBoard = useCallback(() => {
-    setSquares(Array(size * size).fill(null));
+    setSquares(Array(size).fill(null).map(() => Array(size).fill(null)));
     setMessage('');
     setIsSolved(false);
     setConflicts([]);
   }, [size]);
 
   // Check diagonal conflicts
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const hasDiagonalConflict = (row1: number, col1: number, row2: number, col2: number): boolean => {
     // Only check if queens are on adjacent diagonals (directly touching)
     return Math.abs(row1 - row2) === 1 && Math.abs(col1 - col2) === 1;
   };
 
+  const renderChessboard = () => {
+    return (
+      <div className="grid" style={{ gridTemplateColumns: `repeat(${size}, 1fr)` }}>
+        {Array(size).fill(null).map((_, rowIndex) =>
+          Array(size).fill(null).map((_, colIndex) => (
+            <div key={`${rowIndex}-${colIndex}`} className="relative">
+              {renderSquare(rowIndex, colIndex)}
+            </div>
+          ))
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col items-center">
-      <div className="mb-4 flex space-x-4">
+      <div className="mb-4 flex gap-4">
         <button
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           onClick={generateRandomSize}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
         >
           New Puzzle
         </button>
         <button
-          className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
           onClick={showSolution}
-          disabled={isSolved}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
         >
           {showingSolution ? 'Hide Solution' : 'Show Solution'}
         </button>
         <button
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={clearBoard}
-          disabled={showingSolution || isSolved}
+          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
         >
           Clear Board
         </button>
@@ -868,14 +624,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
           </label>
         </div>
         <div className="relative">
-          <div 
-            className="grid gap-[1px] bg-gray-300 p-[1px] border-4 border-black rounded-sm shadow-lg" 
-            style={{ gridTemplateColumns: `repeat(${size}, 3rem)` }}
-          >
-            {Array.from({ length: size }).map((_, row) =>
-              Array.from({ length: size }).map((_, col) => renderSquare(row, col))
-            )}
-          </div>
+          {renderChessboard()}
         </div>
         {isSolved && (
           <div className="text-lg font-semibold text-gray-900">

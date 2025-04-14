@@ -19,7 +19,7 @@ export default function Home() {
             <li>Queens cannot be <b>adjacent</b> to each other in any way (no touching sides or corners)</li>
             <li>Queens can be on the same diagonal line if they are not directly adjacent</li>
           </ul>
-          <p className="mt-4">Click once to mark 'X' (invalid), twice for queen, or right-click to clear.</p>
+          <p className="mt-4">Click once to mark &apos;X&apos; (invalid), twice for queen, or right-click to clear.</p>
         </div>
         <div className="flex justify-center">
           <Chessboard onSizeChange={setBoardSize} />
