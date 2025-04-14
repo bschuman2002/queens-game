@@ -52,6 +52,8 @@ interface ConflictInfo {
   positions: number[];
 }
 
+const borderClasses = 'border border-black';
+
 export default function Chessboard({ size: initialSize = Math.floor(Math.random() * 5) + 8, onSizeChange }: ChessboardProps) {
   const [size, setSize] = useState<number>(initialSize);
   const [regions, setRegions] = useState<RegionColor[][]>([]);
@@ -407,7 +409,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   };
 
   const handleSquareClick = (row: number, col: number) => {
-    if (showingSolution) return;
+    if (showingSolution || isSolved) return;
     
     const index = row * size + col;
     const newSquares = [...squares];
@@ -637,6 +639,20 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     return true;
   };
 
+  const handleRightClick = (e: React.MouseEvent, row: number, col: number) => {
+    e.preventDefault();
+    if (showingSolution || isSolved) return;
+    
+    const position = row * size + col;
+    if (squares[position] === 'queen' || squares[position] === 'x') {
+      const newSquares = [...squares];
+      newSquares[position] = null;
+      setSquares(newSquares);
+      setMessage('Square cleared.');
+      setConflicts([]);
+    }
+  };
+
   const renderSquare = (row: number, col: number) => {
     const position = row * size + col;
     const state = squares[position];
@@ -654,121 +670,28 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
       conflictClass = 'ring-4 ring-red-500';
     }
 
-    // Determine border classes based on neighbors
-    let borderClasses = '';
-    
-    // Check if we need to add borders by comparing region colors with neighbors
-    // Top border
-    if (row === 0) {
-      borderClasses += ' border-t-2 border-black';
-    } else if (regions?.[row-1]?.[col] !== region) {
-      borderClasses += ' border-t-2 border-black';
-    }
-    
-    // Left border
-    if (col === 0) {
-      borderClasses += ' border-l-2 border-black';
-    } else if (regions?.[row]?.[col-1] !== region) {
-      borderClasses += ' border-l-2 border-black';
-    }
-    
-    // Right border
-    if (col === size - 1) {
-      borderClasses += ' border-r-2 border-black';
-    } else if (regions?.[row]?.[col+1] !== region) {
-      borderClasses += ' border-r-2 border-black';
-    }
-    
-    // Bottom border
-    if (row === size - 1) {
-      borderClasses += ' border-b-2 border-black';
-    } else if (regions?.[row+1]?.[col] !== region) {
-      borderClasses += ' border-b-2 border-black';
-    }
-
-    // Handle right click (context menu) to clear the square
-    const handleRightClick = (e: React.MouseEvent) => {
-      e.preventDefault(); // Prevent the context menu from appearing
-      if (showingSolution) return;
-      
-      if (state === 'queen' || state === 'x') {
-        const newSquares = [...squares];
-        newSquares[position] = null;
-        
-        // If removing a queen and auto-place X's is enabled, update X placements
-        if (state === 'queen' && autoPlaceXs) {
-          // Clear all X's first
-          for (let i = 0; i < newSquares.length; i++) {
-            if (newSquares[i] === 'x') {
-              newSquares[i] = null;
-            }
-          }
-          
-          // Re-place X's based on remaining queens
-          for (let r = 0; r < size; r++) {
-            for (let c = 0; c < size; c++) {
-              if (newSquares[r * size + c] === 'queen') {
-                const queenRow = r;
-                const queenCol = c;
-                
-                // Mark invalid positions in the same row
-                for (let c2 = 0; c2 < size; c2++) {
-                  if (c2 !== queenCol && newSquares[queenRow * size + c2] === null) {
-                    newSquares[queenRow * size + c2] = 'x';
-                  }
-                }
-                
-                // Mark invalid positions in the same column
-                for (let r2 = 0; r2 < size; r2++) {
-                  if (r2 !== queenRow && newSquares[r2 * size + queenCol] === null) {
-                    newSquares[r2 * size + queenCol] = 'x';
-                  }
-                }
-                
-                // Mark invalid positions in the same region
-                const region = regions[queenRow][queenCol];
-                for (let r2 = 0; r2 < size; r2++) {
-                  for (let c2 = 0; c2 < size; c2++) {
-                    if ((r2 !== queenRow || c2 !== queenCol) && regions[r2][c2] === region && newSquares[r2 * size + c2] === null) {
-                      newSquares[r2 * size + c2] = 'x';
-                    }
-                  }
-                }
-                
-                // Mark only directly adjacent diagonal squares
-                for (let r2 = Math.max(0, queenRow - 1); r2 <= Math.min(size - 1, queenRow + 1); r2++) {
-                  for (let c2 = Math.max(0, queenCol - 1); c2 <= Math.min(size - 1, queenCol + 1); c2++) {
-                    if ((r2 !== queenRow || c2 !== queenCol) && Math.abs(r2 - queenRow) === 1 && Math.abs(c2 - queenCol) === 1 && newSquares[r2 * size + c2] === null) {
-                      newSquares[r2 * size + c2] = 'x';
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        setSquares(newSquares);
-      }
-    };
+    // Add solved state classes
+    const solvedClass = isSolved ? 'opacity-90 cursor-not-allowed' : '';
 
     return (
       <div
         key={`${row}-${col}`}
-        className={`w-12 h-12 flex items-center justify-center cursor-pointer relative outline-none focus:outline-none active:outline-none
+        className={`w-12 h-12 flex items-center justify-center relative outline-none focus:outline-none active:outline-none
           ${REGION_COLORS[region]}
           ${borderClasses}
-          ${conflictClass}`}
-        onClick={() => handleSquareClick(row, col)}
-        onContextMenu={handleRightClick}
+          ${conflictClass}
+          ${solvedClass}
+          ${!isSolved ? 'cursor-pointer' : ''}`}
+        onClick={() => !isSolved && handleSquareClick(row, col)}
+        onContextMenu={(e) => !isSolved && handleRightClick(e, row, col)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
+          if (!isSolved && (e.key === 'Enter' || e.key === ' ')) {
             handleSquareClick(row, col);
             e.preventDefault();
           }
         }}
         role="button"
-        tabIndex={0}
+        tabIndex={isSolved ? -1 : 0}
         title={conflictTypes.length > 0 ? `Conflicts: ${conflictTypes.join(', ')}` : ''}
         style={{ 
           WebkitTapHighlightColor: 'transparent',
@@ -778,7 +701,8 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
           WebkitTouchCallout: 'none',
           borderStyle: 'solid',
           borderColor: 'black',
-          WebkitUserModify: 'read-only'
+          WebkitUserModify: 'read-only',
+          filter: isSolved ? 'brightness(0.95)' : 'none'
         }}
       >
         {state === 'x' && (
@@ -826,20 +750,21 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         <button
           className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
           onClick={showSolution}
+          disabled={isSolved}
         >
           {showingSolution ? 'Hide Solution' : 'Show Solution'}
         </button>
         <button
           className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={clearBoard}
-          disabled={showingSolution}
+          disabled={showingSolution || isSolved}
         >
           Clear Board
         </button>
       </div>
       
       <div className="text-sm text-gray-900 mb-4 font-medium">
-        Click once for X, twice for queen, three times to clear (or right-click to clear)
+        {!isSolved ? 'Click once for X, twice for queen, three times to clear (or right-click to clear)' : 'Puzzle solved! Start a new puzzle to continue playing.'}
       </div>
       
       <div className="flex flex-col items-center gap-4">
