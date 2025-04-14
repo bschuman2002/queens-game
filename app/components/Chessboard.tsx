@@ -72,6 +72,56 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     }
   }, [initialSize, onSizeChange]);
 
+  const isRegionConnected = (regions: RegionColor[][], color: RegionColor): boolean => {
+    const visited = Array(size).fill(false).map(() => Array(size).fill(false));
+    let startRow = -1, startCol = -1;
+    
+    // Find first cell of this color
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (regions[r][c] === color) {
+          startRow = r;
+          startCol = c;
+          break;
+        }
+      }
+      if (startRow !== -1) break;
+    }
+    
+    if (startRow === -1) return true; // No cells of this color
+    
+    // BFS to check connectivity
+    const queue: [number, number][] = [[startRow, startCol]];
+    visited[startRow][startCol] = true;
+    const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    
+    while (queue.length > 0) {
+      const [r, c] = queue.shift()!;
+      
+      for (const [dr, dc] of directions) {
+        const newRow = r + dr;
+        const newCol = c + dc;
+        
+        if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size &&
+            !visited[newRow][newCol] && regions[newRow][newCol] === color) {
+          visited[newRow][newCol] = true;
+          queue.push([newRow, newCol]);
+        }
+      }
+    }
+    
+    // Check if all cells of this color were visited
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (regions[r][c] === color && !visited[r][c]) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  };
+
   const generatePuzzle = useCallback((): [RegionColor[][], SquareState[]] => {
     // STEP 1: Place queens with controlled randomness
     const queens: [number, number][] = [];
@@ -89,13 +139,10 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
     const placeQueens = (index: number): boolean => {
       if (index === size) return true;
 
-      // Try columns in random order
       for (const col of shuffledCols) {
         const row = index;
-        
         if (usedCols.has(col)) continue;
         
-        // Check for adjacent queens
         let hasAdjacentQueen = false;
         for (const [qRow, qCol] of queens) {
           if (Math.abs(row - qRow) <= 1 && Math.abs(col - qCol) <= 1) {
@@ -114,7 +161,6 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
         queens.pop();
         usedCols.delete(col);
       }
-      
       return false;
     };
 
@@ -122,104 +168,115 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
       throw new Error('Failed to place queens');
     }
 
-    // Create the solution array first
+    // Create the solution array
     const solutionArray: SquareState[] = Array(size * size).fill(null);
     queens.forEach(([row, col]) => {
       solutionArray[row * size + col] = 'queen';
     });
 
-    // STEP 2: Generate regions with controlled randomness
+    // STEP 2: Generate regions by growing from queens
     const regions: RegionColor[][] = Array(size)
       .fill(null)
       .map(() => Array(size).fill(null as unknown as RegionColor));
     
-    // Shuffle available colors
     const availableColors: RegionColor[] = [
-      'blue', 'yellow', 'red', 'lime', 
-      'purple', 'cyan', 'brown', 'green',
-      'indigo', 'orange', 'emerald', 'pink',
+      'blue', 'yellow', 'red', 'lime', 'purple', 'cyan', 
+      'brown', 'green', 'indigo', 'orange', 'emerald', 'pink',
       'gray', 'amber', 'teal', 'rose'
-    ];
-    
+    ].slice(0, queens.length) as RegionColor[];
+
+    // Shuffle colors
     for (let i = availableColors.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [availableColors[i], availableColors[j]] = [availableColors[j], availableColors[i]];
     }
 
-    // Assign random colors to queens
+    // Initialize regions with queens
     queens.forEach(([row, col], index) => {
-      regions[row][col] = availableColors[index % availableColors.length];
+      regions[row][col] = availableColors[index];
     });
 
-    // Grow regions with controlled randomness
-    const processed = Array(size).fill(false).map(() => Array(size).fill(false));
-    queens.forEach(([row, col]) => {
-      processed[row][col] = true;
-    });
+    // Function to get unassigned neighbors
+    const getUnassignedNeighbors = (row: number, col: number): [number, number][] => {
+      const neighbors: [number, number][] = [];
+      const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+      
+      for (const [dr, dc] of directions) {
+        const newRow = row + dr;
+        const newCol = col + dc;
+        if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && 
+            regions[newRow][newCol] === null) {
+          neighbors.push([newRow, newCol]);
+        }
+      }
+      return neighbors;
+    };
 
-    // Create a list of unprocessed cells and shuffle it
-    const unprocessedCells: [number, number][] = [];
-    for (let row = 0; row < size; row++) {
-      for (let col = 0; col < size; col++) {
-        if (!processed[row][col]) {
-          unprocessedCells.push([row, col]);
+    // Grow regions from queens
+    const unprocessed = new Set<string>();
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (regions[r][c] === null) {
+          unprocessed.add(`${r},${c}`);
         }
       }
     }
-    
-    // Shuffle unprocessed cells
-    for (let i = unprocessedCells.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [unprocessedCells[i], unprocessedCells[j]] = [unprocessedCells[j], unprocessedCells[i]];
-    }
 
-    // Process cells in random order
-    while (unprocessedCells.length > 0) {
-      let madeProgress = false;
-      
-      for (let i = unprocessedCells.length - 1; i >= 0; i--) {
-        const [row, col] = unprocessedCells[i];
+    // Keep growing regions until all cells are assigned
+    while (unprocessed.size > 0) {
+      // For each color, try to grow its region
+      for (let colorIndex = 0; colorIndex < availableColors.length; colorIndex++) {
+        const color = availableColors[colorIndex];
+        
+        // Find all cells of this color
+        const colorCells: [number, number][] = [];
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (regions[r][c] === color) {
+              colorCells.push([r, c]);
+            }
+          }
+        }
+
+        // Try to grow from each cell of this color
+        for (const [row, col] of colorCells) {
+          const neighbors = getUnassignedNeighbors(row, col);
+          for (const [nRow, nCol] of neighbors) {
+            // Random chance to grow in this direction
+            if (Math.random() < 0.5) {
+              regions[nRow][nCol] = color;
+              unprocessed.delete(`${nRow},${nCol}`);
+            }
+          }
+        }
+      }
+
+      // If no growth happened, assign remaining cells to adjacent regions
+      if (unprocessed.size > 0) {
+        const remaining = Array.from(unprocessed);
+        const [r, c] = remaining[Math.floor(Math.random() * remaining.length)]
+          .split(',')
+          .map(Number);
         
         // Find adjacent colors
         const adjacentColors = new Set<RegionColor>();
         const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-        
         for (const [dr, dc] of directions) {
-          const newRow = row + dr;
-          const newCol = col + dc;
-          
-          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && processed[newRow][newCol]) {
+          const newRow = r + dr;
+          const newCol = c + dc;
+          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && 
+              regions[newRow][newCol] !== null) {
             adjacentColors.add(regions[newRow][newCol]);
           }
         }
 
-        // If we found adjacent colors, randomly choose one
-        if (adjacentColors.size > 0) {
-          const colorArray = Array.from(adjacentColors);
-          const randomColor = colorArray[Math.floor(Math.random() * colorArray.length)];
-          regions[row][col] = randomColor;
-          processed[row][col] = true;
-          unprocessedCells.splice(i, 1);
-          madeProgress = true;
-        }
-      }
-
-      // If we can't make progress, assign the first available adjacent color
-      if (!madeProgress && unprocessedCells.length > 0) {
-        const [row, col] = unprocessedCells[0];
-        const directions = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+        // If no adjacent colors, use random color
+        const color = adjacentColors.size > 0 
+          ? Array.from(adjacentColors)[Math.floor(Math.random() * adjacentColors.size)]
+          : availableColors[Math.floor(Math.random() * availableColors.length)];
         
-        for (const [dr, dc] of directions) {
-          const newRow = row + dr;
-          const newCol = col + dc;
-          
-          if (newRow >= 0 && newRow < size && newCol >= 0 && newCol < size && processed[newRow][newCol]) {
-            regions[row][col] = regions[newRow][newCol];
-            processed[row][col] = true;
-            unprocessedCells.shift();
-            break;
-          }
-        }
+        regions[r][c] = color;
+        unprocessed.delete(`${r},${c}`);
       }
     }
 
@@ -230,16 +287,23 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   useEffect(() => {
     const generateValidPuzzle = () => {
       let retryCount = 0;
-      const maxRetries = 3;
+      const maxRetries = 10; // Increased from 3 to 10 for better chances
 
       while (retryCount < maxRetries) {
         try {
           const [newRegions, newSolution] = generatePuzzle();
-          // Verify the puzzle is valid (not all purple and has valid regions)
-          const isValid = newRegions.some(row => 
-            row.some(color => color !== 'purple') && 
-            row.every(color => color !== null)
-          );
+          
+          // Count unique colors used
+          const usedColors = new Set<RegionColor>();
+          for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+              usedColors.add(newRegions[r][c]);
+            }
+          }
+          
+          // Ensure we have at least size/2 different colors and no null regions
+          const isValid = usedColors.size >= Math.ceil(size/2) && 
+            newRegions.every(row => row.every(color => color !== null));
           
           if (isValid) {
             setRegions(newRegions);
@@ -250,6 +314,7 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
             setMessage('');
             return true;
           }
+          retryCount++;
         } catch (error) {
           console.error('Attempt failed:', error);
           retryCount++;
@@ -273,13 +338,26 @@ export default function Chessboard({ size: initialSize = Math.floor(Math.random(
   // Function to randomly select a new board size
   const generateRandomSize = useCallback(() => {
     setShowingSolution(false);
-    const newSize = Math.floor(Math.random() * 5) + 8; // Random size between 8 and 12
-    setSize(newSize);
+    let newSize;
+    // Keep generating until we get a different size, or force regeneration with same size
+    do {
+      newSize = Math.floor(Math.random() * 5) + 8;
+    } while (newSize === size && Math.random() < 0.5); // 50% chance to retry if same size
+    
+    // Force puzzle regeneration by clearing state first
     setSquares(Array(newSize * newSize).fill(null));
+    setRegions([]);
+    setSolution([]);
+    setIsSolved(false);
+    setConflicts([]);
+    setMessage('');
+    
+    // Set new size which will trigger puzzle generation
+    setSize(newSize);
     if (onSizeChange) {
       onSizeChange(newSize);
     }
-  }, [onSizeChange]);
+  }, [size, onSizeChange]);
 
   const isValidPosition = (board: SquareState[], row: number, col: number): boolean => {
     // If regions is not properly initialized, return false
