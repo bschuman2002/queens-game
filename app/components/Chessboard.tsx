@@ -702,12 +702,12 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
   const renderSquare = (row: number, col: number) => {
     // Handle out-of-bounds indexes during SSR
     if (!isMounted && (row >= 8 || col >= 8)) {
-      return <div className="w-12 h-12 bg-purple-700 border border-black/10"></div>;
+      return <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-700 border border-black/10"></div>;
     }
     
     // Handle potential undefined values during SSR/hydration
     if (!squares[row] || squares[row][col] === undefined || !regions[row] || regions[row][col] === undefined) {
-      return <div className="w-12 h-12 bg-purple-700 border border-black/10"></div>;
+      return <div className="w-8 h-8 sm:w-12 sm:h-12 bg-purple-700 border border-black/10"></div>;
     }
     
     const position = row * size + col;
@@ -779,7 +779,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
     return (
       <div
         key={`${row}-${col}`}
-        className={`w-12 h-12 flex items-center justify-center relative outline-none focus:outline-none active:outline-none
+        className={`w-8 h-8 sm:w-12 sm:h-12 flex items-center justify-center relative outline-none focus:outline-none active:outline-none
           ${REGION_COLORS[region]}
           border border-black/10
           ${topBorder} ${bottomBorder} ${leftBorder} ${rightBorder}
@@ -810,11 +810,11 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
         }}
       >
         {state === 'x' && (
-          <span className="text-black text-opacity-60 text-lg select-none">✕</span>
+          <span className="text-black text-opacity-60 text-sm sm:text-lg select-none">✕</span>
         )}
         {state === 'queen' && (
           <>
-            <span className={`text-2xl relative ${
+            <span className={`text-xl sm:text-2xl relative ${
               isSolved ? 'text-yellow-500' : 
               isConflicting ? 'text-red-600' : 
               'text-black'
@@ -823,7 +823,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
             }`}>
               ♛
               {isConflicting && (
-                <span className="absolute -top-2 -right-2 w-3 h-3 bg-red-500 rounded-full animate-ping"></span>
+                <span className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 w-2 h-2 sm:w-3 sm:h-3 bg-red-500 rounded-full animate-ping"></span>
               )}
             </span>
           </>
@@ -880,12 +880,12 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
   };
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="mb-4 flex gap-4">
+    <div className="flex flex-col items-center w-full max-w-screen-lg mx-auto px-4">
+      <div className="mb-4 flex flex-wrap gap-2 sm:gap-4 justify-center">
         <button
           onClick={generateRandomSize}
           disabled={isGenerating || showingSolution}
-          className={`px-4 py-2 rounded transition-colors ${
+          className={`px-3 py-1.5 sm:px-4 sm:py-2 text-sm sm:text-base rounded transition-colors ${
             isGenerating || showingSolution
               ? 'bg-blue-300 text-white cursor-not-allowed opacity-60'
               : 'bg-blue-500 text-white hover:bg-blue-600'
@@ -895,14 +895,14 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
         </button>
         <button
           onClick={showSolution}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+          className="px-3 py-1.5 sm:px-4 sm:py-2 text-sm sm:text-base bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
         >
           {showingSolution ? 'Hide Solution' : 'Show Solution'}
         </button>
         <button
           onClick={clearBoard}
           disabled={showingSolution}
-          className={`px-4 py-2 rounded transition-colors ${
+          className={`px-3 py-1.5 sm:px-4 sm:py-2 text-sm sm:text-base rounded transition-colors ${
             showingSolution 
               ? 'bg-red-300 text-white cursor-not-allowed opacity-60' 
               : 'bg-red-500 text-white hover:bg-red-600'
@@ -912,25 +912,25 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
         </button>
       </div>
       
-      <div className="text-sm text-gray-900 mb-4 font-medium">
+      <div className="text-xs sm:text-sm text-gray-900 mb-4 font-medium text-center">
         {!isSolved ? 'Click once for X, twice for queen, three times to clear (or right-click to clear)' : 'Puzzle solved! Start a new puzzle to continue playing.'}
       </div>
       
       <div className="flex flex-col items-center gap-4">
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+        <div className="flex items-center gap-2 sm:gap-4">
+          <label className="flex items-center gap-2 text-xs sm:text-sm font-medium text-gray-900">
             <button
               type="button"
               role="switch"
               aria-checked={autoPlaceXs}
               onClick={() => setAutoPlaceXs(!autoPlaceXs)}
-              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+              className={`relative inline-flex h-4 sm:h-5 w-8 sm:w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
                 autoPlaceXs ? 'bg-blue-600' : 'bg-gray-200'
               }`}
             >
               <span
                 aria-hidden="true"
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                className={`pointer-events-none inline-block h-3 sm:h-4 w-3 sm:w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                   autoPlaceXs ? 'translate-x-4' : 'translate-x-0'
                 }`}
               />
@@ -938,11 +938,11 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
             <span>Auto-place X's</span>
           </label>
         </div>
-        <div className="relative p-4">
+        <div className="relative p-2 sm:p-4">
           {renderChessboard()}
         </div>
         {isSolved && (
-          <div className="text-lg font-semibold text-gray-900">
+          <div className="text-base sm:text-lg font-semibold text-gray-900 text-center">
             Congratulations! You solved the puzzle!
           </div>
         )}
@@ -951,7 +951,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
       {/* Toast notification */}
       {toast.visible && (
         <div 
-          className={`fixed bottom-4 right-4 px-6 py-3 rounded-md shadow-lg text-white transition-opacity duration-300 ${
+          className={`fixed bottom-4 right-4 px-4 sm:px-6 py-2 sm:py-3 rounded-md shadow-lg text-white text-sm sm:text-base transition-opacity duration-300 ${
             toast.type === 'success' ? 'bg-green-500' : 
             toast.type === 'error' ? 'bg-red-500' : 
             'bg-blue-500'
