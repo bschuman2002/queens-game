@@ -9,7 +9,7 @@
     "lint": "next lint",
     "auto-commit": "bash scripts/auto-commit.sh",
     "test": "vitest",
-    "deploy": "vercel deploy --prod"
+    "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
     "next": "^15.3.0",
