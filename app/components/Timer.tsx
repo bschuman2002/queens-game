@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface TimerProps {
   isRunning: boolean;
   onReset?: () => void;
+  shouldReset?: boolean;
 }
 
-export default function Timer({ isRunning, onReset }: TimerProps) {
+export default function Timer({ isRunning, onReset, shouldReset = false }: TimerProps) {
   const [seconds, setSeconds] = useState(0);
+  const prevRunningRef = useRef(isRunning);
   
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -26,11 +28,17 @@ export default function Timer({ isRunning, onReset }: TimerProps) {
     };
   }, [isRunning]);
   
+  // Reset only when shouldReset is true
   useEffect(() => {
-    if (!isRunning && seconds > 0 && onReset) {
-      onReset();
+    if (shouldReset) {
+      setSeconds(0);
     }
-  }, [isRunning, seconds, onReset]);
+  }, [shouldReset]);
+  
+  // Track changes in running state
+  useEffect(() => {
+    prevRunningRef.current = isRunning;
+  }, [isRunning]);
   
   // Format time as mm:ss
   const formatTime = (totalSeconds: number): string => {

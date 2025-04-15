@@ -42,6 +42,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
   const [conflicts, setConflicts] = useState<ConflictInfo[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [timerRunning, setTimerRunning] = useState(false);
+  const [shouldResetTimer, setShouldResetTimer] = useState(false);
   const [toast, setToast] = useState<{message: string, type: 'info' | 'success' | 'error', visible: boolean}>({
     message: '',
     type: 'info',
@@ -81,8 +82,22 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
 
   // Function to handle timer reset when starting a new puzzle
   const resetTimer = useCallback(() => {
+    // First stop the timer if it's running
     setTimerRunning(false);
-  }, []);
+    // Signal that the timer should reset
+    setShouldResetTimer(true);
+    
+    // Small delay before starting the timer again (for new puzzle)
+    setTimeout(() => {
+      if (!isSolved) {
+        setTimerRunning(true);
+        // Reset the shouldResetTimer flag after a brief delay
+        setTimeout(() => {
+          setShouldResetTimer(false);
+        }, 50);
+      }
+    }, 100);
+  }, [isSolved]);
 
   // Memoize the generateValidPuzzle function
   const generateValidPuzzle = useCallback(() => {
@@ -109,7 +124,18 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
       setMessage('');
       
       setIsGenerating(false);
-      setTimerRunning(true); // Start the timer when puzzle is ready
+      
+      // Reset timer and start it for the new puzzle
+      setTimerRunning(false);
+      setShouldResetTimer(true);
+      setTimeout(() => {
+        setTimerRunning(true);
+        // Reset the shouldResetTimer flag after a brief delay
+        setTimeout(() => {
+          setShouldResetTimer(false);
+        }, 50);
+      }, 100);
+      
       showToast('New puzzle ready!', 'success');
       return true;
     } catch (error) {
@@ -153,6 +179,11 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
 
     setIsGenerating(true);
     showToast('Generating new puzzle...', 'info');
+    
+    // Stop timer and prepare to reset before generating new puzzle
+    setTimerRunning(false);
+    setShouldResetTimer(true);
+    
     const success = generateValidPuzzle();
     
     if (!success) {
@@ -162,7 +193,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
       // Reset retry count on success
       setRetryCount(0);
     }
-  }, [size, onSizeChange, generateValidPuzzle, retryCount, MAX_RETRIES, isMounted]); // Include isMounted
+  }, [size, onSizeChange, generateValidPuzzle, retryCount, MAX_RETRIES, isMounted]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isRegionConnected = (regions: RegionColor[][], color: RegionColor): boolean => {
@@ -230,14 +261,16 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
     setConflicts([]);
     setMessage('');
     setRetryCount(0); // Reset retry count when user manually requests a new puzzle
-    resetTimer(); // Reset timer when generating new puzzle
+    
+    // Stop the timer, but we don't reset it yet - we'll let generateValidPuzzle handle that
+    setTimerRunning(false);
     
     // Set new size which will trigger puzzle generation
     setSize(newSize);
     if (onSizeChange) {
       onSizeChange(newSize);
     }
-  }, [onSizeChange, isGenerating, resetTimer]);
+  }, [onSizeChange, isGenerating]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isValidPosition = (board: SquareState[][], row: number, col: number): boolean => {
@@ -518,7 +551,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
       const conflicts = findConflicts(newSquares);
       if (conflicts.length === 0) {
         setIsSolved(true);
-        setTimerRunning(false); // Stop the timer when solved
+        setTimerRunning(false); // Stop the timer when solved, but don't reset it
         setMessage('Congratulations! You solved the puzzle!');
       } else {
         setConflicts(conflicts);
@@ -856,6 +889,10 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
     setMessage('');
     setIsSolved(false);
     setConflicts([]);
+    
+    // Just stop the timer when clearing the board, don't reset it
+    setTimerRunning(false);
+    
     // No need to handle auto-X placements here since we're clearing everything
   }, [size]);
 
@@ -926,7 +963,7 @@ export default function Chessboard({ size: initialSize = 8, onSizeChange }: Ches
         <div className="text-xs sm:text-sm text-gray-900 font-medium text-center">
           {!isSolved ? 'Click once for X, twice for queen, three times to clear (or right-click to clear)' : 'Puzzle solved! Start a new puzzle to continue playing.'}
         </div>
-        <Timer isRunning={timerRunning} onReset={resetTimer} />
+        <Timer isRunning={timerRunning} shouldReset={shouldResetTimer} />
       </div>
       
       <div className="flex flex-col items-center gap-4">
